@@ -6,12 +6,16 @@ VERSION_OVERRIDE=${1:-}
 PACKAGE_JSON="$ROOT_DIR/codex-cli/package.json"
 INSTALL_NATIVE_SCRIPT="$ROOT_DIR/codex-cli/scripts/install_native_deps.py"
 ORIG_VERSION=$(node -e "console.log(require('$PACKAGE_JSON').version)")
-cleanup_version() {
+TMP_DIR=""
+cleanup() {
   if [[ -n "$VERSION_OVERRIDE" ]]; then
     node -e "const fs=require('fs');const pkg=require('$PACKAGE_JSON');pkg.version='$ORIG_VERSION';fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg,null,2)+'\\n');"
   fi
+  if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
+    rm -rf "$TMP_DIR"
+  fi
 }
-trap cleanup_version EXIT
+trap cleanup EXIT
 if [[ -n "$VERSION_OVERRIDE" ]]; then
   node -e "const fs=require('fs');const pkg=require('$PACKAGE_JSON');pkg.version='$VERSION_OVERRIDE';fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg,null,2)+'\\n');"
 fi
@@ -24,9 +28,13 @@ else
   echo "python3 is required to install native dependencies" >&2
   exit 1
 fi
-find "$ROOT_DIR/codex-cli/vendor" -type f \( -name codex -o -name 'codex.exe' \) -exec chmod +x {} +
-rm -f dist/*.tgz
+rm -rf dist
+mkdir -p dist
 $PNPM pack --pack-destination ./dist
 TARBALL="openai-codex-${VERSION_OVERRIDE:-0.0.0-dev}.tgz"
-mv "dist/$TARBALL" dist/codexaw.tgz
+TMP_DIR=$(mktemp -d)
+tar -xzf "dist/$TARBALL" -C "$TMP_DIR"
+find "$TMP_DIR/package/vendor" -type f \( -name codex -o -name 'codex.exe' \) -exec chmod +x {} +
+tar -czf dist/codexaw.tgz -C "$TMP_DIR" package
+rm "dist/$TARBALL"
 echo "Built codex-cli/dist/codexaw.tgz (version ${VERSION_OVERRIDE:-$ORIG_VERSION})"
