@@ -28,9 +28,18 @@ fi
 
 TAG="codexaw-v$VERSION"
 
+reuse_tag=false
+release_exists=false
 if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-  echo "Error: tag ${TAG} already exists."
-  exit 1
+  read -rp "Tag ${TAG} already exists. Reuse it? [y/N]: " reuse_response
+  if [[ ! "$reuse_response" =~ ^[Yy]$ ]]; then
+    echo "Aborting release; choose a new version."
+    exit 1
+  fi
+  reuse_tag=true
+  if gh release view "${TAG}" >/dev/null 2>&1; then
+    release_exists=true
+  fi
 fi
 
 "$ROOT_DIR/build_dist.sh" "$VERSION"
@@ -40,12 +49,18 @@ if [[ ! -f "$DIST_PATH" ]]; then
   exit 1
 fi
 
-git tag "${TAG}"
-git push origin "${TAG}"
+if [[ "$reuse_tag" != true ]]; then
+  git tag "${TAG}"
+  git push origin "${TAG}"
+fi
 
-gh release create "${TAG}" "$DIST_PATH" \
-  --title "codexaw ${TAG}" \
-  --notes "Automated release for ${TAG}"
+if [[ "$reuse_tag" == true && "$release_exists" == true ]]; then
+  gh release upload "${TAG}" "$DIST_PATH" --clobber
+else
+  gh release create "${TAG}" "$DIST_PATH" \
+    --title "codexaw ${TAG}" \
+    --notes "Automated release for ${TAG}"
+fi
 
 echo
 echo "Release created for ${TAG}."
