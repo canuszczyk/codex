@@ -32,6 +32,11 @@ mod wsl_paths;
 
 use crate::mcp_cmd::McpCli;
 
+const CLI_VERSION: &str = match option_env!("CODEX_VERSION_OVERRIDE") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 use codex_core::config::Config;
 use codex_core::config::ConfigOverrides;
 use codex_core::features::is_known_feature_key;
@@ -42,7 +47,7 @@ use codex_core::features::is_known_feature_key;
 #[derive(Debug, Parser)]
 #[clap(
     author,
-    version,
+    version = CLI_VERSION,
     // If a sub‑command is given, ignore requirements of the default args.
     subcommand_negates_reqs = true,
     // The executable is sometimes invoked via a platform‑specific name like
