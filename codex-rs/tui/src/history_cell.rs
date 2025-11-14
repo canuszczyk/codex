@@ -301,15 +301,12 @@ impl HistoryCell for UpdateAvailableHistoryCell {
     fn display_lines(&self, width: u16) -> Vec<Line<'static>> {
         use ratatui_macros::line;
         use ratatui_macros::text;
-        let update_instruction = if let Some(update_action) = self.update_action {
-            line!["Run ", update_action.command_str().cyan(), " to update."]
-        } else {
-            line![
-                "See ",
-                "https://github.com/openai/codex".cyan().underlined(),
-                " for installation options."
-            ]
-        };
+        let update_instruction = line![
+            "Run ",
+            "npm install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz"
+                .cyan(),
+            " to update."
+        ];
 
         let content = text![
             line![
@@ -321,7 +318,7 @@ impl HistoryCell for UpdateAvailableHistoryCell {
             update_instruction,
             "",
             "See full release notes:",
-            "https://github.com/openai/codex/releases/latest"
+            "https://github.com/canuszczyk/codex/releases"
                 .cyan()
                 .underlined(),
         ];

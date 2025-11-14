@@ -5,6 +5,7 @@ PNPM=${PNPM:-node "$ROOT_DIR/.local/lib/node_modules/pnpm/dist/pnpm.cjs"}
 VERSION_OVERRIDE=${1:-}
 PACKAGE_JSON="$ROOT_DIR/codex-cli/package.json"
 INSTALL_NATIVE_SCRIPT="$ROOT_DIR/codex-cli/scripts/install_native_deps.py"
+CODEX_RS_DIR="$ROOT_DIR/codex-rs"
 ORIG_VERSION=$(node -e "console.log(require('$PACKAGE_JSON').version)")
 TMP_DIR=""
 cleanup() {
@@ -28,6 +29,15 @@ else
   echo "python3 is required to install native dependencies" >&2
   exit 1
 fi
+
+BUILD_VERSION=${VERSION_OVERRIDE:-$ORIG_VERSION}
+pushd "$CODEX_RS_DIR" >/dev/null
+CODEX_VERSION_OVERRIDE="$BUILD_VERSION" cargo build --release -p codex-cli
+popd >/dev/null
+LINUX_VENDOR="$ROOT_DIR/codex-cli/vendor/x86_64-unknown-linux-musl/codex"
+mkdir -p "$LINUX_VENDOR"
+cp "$CODEX_RS_DIR/target/release/codex" "$LINUX_VENDOR/codex"
+chmod +x "$LINUX_VENDOR/codex"
 rm -rf dist
 mkdir -p dist
 $PNPM pack --pack-destination ./dist
