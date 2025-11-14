@@ -85,4 +85,5 @@ CHANGELOG.ignore.md
 .devcontainer/.env
 .devcontainer/post-create-command.sh
 .local/
+.tmp/
 package-lock.json
