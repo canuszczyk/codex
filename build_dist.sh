@@ -24,6 +24,7 @@ else
   echo "python3 is required to install native dependencies" >&2
   exit 1
 fi
+find "$ROOT_DIR/codex-cli/vendor" -type f \( -name codex -o -name 'codex.exe' \) -exec chmod +x {} +
 rm -f dist/*.tgz
 $PNPM pack --pack-destination ./dist
 TARBALL="openai-codex-${VERSION_OVERRIDE:-0.0.0-dev}.tgz"
