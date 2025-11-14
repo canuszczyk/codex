@@ -19,7 +19,7 @@ cd "$ROOT_DIR"
 $PNPM install
 cd "$ROOT_DIR/codex-cli"
 if command -v python3 >/dev/null 2>&1; then
-  python3 "$INSTALL_NATIVE_SCRIPT" "$ROOT_DIR/codex-cli"
+  python3 "$INSTALL_NATIVE_SCRIPT" --component codex "$ROOT_DIR/codex-cli"
 else
   echo "python3 is required to install native dependencies" >&2
   exit 1
