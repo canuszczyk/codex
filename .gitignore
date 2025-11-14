@@ -82,3 +82,7 @@ CHANGELOG.ignore.md
 # nix related
 .direnv
 .envrc
+.devcontainer/.env
+.devcontainer/post-create-command.sh
+.local/
+package-lock.json
