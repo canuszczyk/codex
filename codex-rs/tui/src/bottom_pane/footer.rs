@@ -2,6 +2,7 @@ use crate::key_hint;
 use crate::key_hint::KeyBinding;
 use crate::render::line_utils::prefix_lines;
 use crate::ui_consts::FOOTER_INDENT_COLS;
+use crate::version::CODEX_CLI_VERSION;
 use crossterm::event::KeyCode;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -10,6 +11,8 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 use ratatui::widgets::Paragraph;
 use ratatui::widgets::Widget;
+
+const PRODUCT_NAME: &str = "codexAW";
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FooterProps {
@@ -223,7 +226,12 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
 
 fn context_window_line(percent: Option<i64>) -> Line<'static> {
     let percent = percent.unwrap_or(100).clamp(0, 100);
-    Line::from(vec![Span::from(format!("{percent}% context left")).dim()])
+    Line::from(vec![
+        PRODUCT_NAME.cyan().into(),
+        format!(" ({CODEX_CLI_VERSION})").dim(),
+        " ".into(),
+        format!("{percent}% context left").dim(),
+    ])
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
