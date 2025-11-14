@@ -54,12 +54,31 @@ const VERSION_FILENAME: &str = "version.json";
 // We use the latest version from the cask if installation is via homebrew - homebrew does not immediately pick up the latest release and can lag behind.
 const HOMEBREW_CASK_URL: &str =
     "https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/Casks/c/codex.rb";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/canuszczyk/codex/releases/latest";
+const LATEST_RELEASES_URL: &str =
+    "https://api.github.com/repos/canuszczyk/codex/releases?per_page=20";
 const RELEASE_TAG_PREFIXES: [&str; 2] = ["codexaw-v", "rust-v"];
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
     tag_name: String,
+}
+
+async fn fetch_latest_release_version() -> anyhow::Result<String> {
+    let releases: Vec<ReleaseInfo> = create_client()
+        .get(LATEST_RELEASES_URL)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    for release in releases {
+        if let Ok(version) = extract_version_from_latest_tag(&release.tag_name) {
+            return Ok(version);
+        }
+    }
+    Err(anyhow::anyhow!(
+        "No matching release tag found in recent releases"
+    ))
 }
 
 fn version_filepath(config: &Config) -> PathBuf {
@@ -83,18 +102,7 @@ async fn check_for_update(version_file: &Path) -> anyhow::Result<()> {
                 .await?;
             extract_version_from_cask(&cask_contents)?
         }
-        _ => {
-            let ReleaseInfo {
-                tag_name: latest_tag_name,
-            } = create_client()
-                .get(LATEST_RELEASE_URL)
-                .send()
-                .await?
-                .error_for_status()?
-                .json::<ReleaseInfo>()
-                .await?;
-            extract_version_from_latest_tag(&latest_tag_name)?
-        }
+        _ => fetch_latest_release_version().await?,
     };
 
     // Preserve any previously dismissed version if present.
