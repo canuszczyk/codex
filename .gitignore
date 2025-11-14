@@ -50,6 +50,7 @@ yarn-error.log*
 # env
 .env*
 !.env.example
+!.devcontainer/.env
 
 # package
 *.tgz
@@ -82,8 +83,6 @@ CHANGELOG.ignore.md
 # nix related
 .direnv
 .envrc
-.devcontainer/.env
-.devcontainer/post-create-command.sh
 .local/
 .tmp/
 package-lock.json
