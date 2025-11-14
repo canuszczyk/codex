@@ -68,6 +68,15 @@ pub(crate) enum UserNotification {
         /// The last message sent by the assistant in the turn.
         last_assistant_message: Option<String>,
     },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnStop {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+
+        /// Messages that the user sent to the agent to initiate the turn.
+        input_messages: Vec<String>,
+    },
 }
 
 #[cfg(test)]
@@ -102,6 +111,18 @@ mod tests {
         assert_eq!(
             serialized,
             r#"{"type":"agent-turn-complete","thread-id":"b5f6c1c2-1111-2222-3333-444455556666","turn-id":"12345","cwd":"/Users/example/project","input-messages":["Rename `foo` to `bar` and update the callsites."],"last-assistant-message":"Rename complete and verified `cargo build` succeeds."}"#
+        );
+
+        let stop_notification = UserNotification::AgentTurnStop {
+            thread_id: "b5f6c1c2-1111-2222-3333-444455556666".to_string(),
+            turn_id: "54321".to_string(),
+            cwd: "/Users/example/project".to_string(),
+            input_messages: vec!["hello world".to_string()],
+        };
+        let stop_serialized = serde_json::to_string(&stop_notification)?;
+        assert_eq!(
+            stop_serialized,
+            r#"{"type":"agent-turn-stop","thread-id":"b5f6c1c2-1111-2222-3333-444455556666","turn-id":"54321","cwd":"/Users/example/project","input-messages":["hello world"]}"#
         );
         Ok(())
     }

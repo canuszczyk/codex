@@ -1311,6 +1311,10 @@ impl Session {
         &self.services.notifier
     }
 
+    pub(crate) fn conversation_id(&self) -> ConversationId {
+        self.conversation_id
+    }
+
     pub(crate) fn user_shell(&self) -> &shell::Shell {
         &self.services.user_shell
     }
