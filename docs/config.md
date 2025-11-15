@@ -660,6 +660,22 @@ Specify a program that will be executed to get notified about events generated b
 }
 ```
 
+If the agent requires approval mid-turn you'll receive a user-prompt notification while it waits:
+
+```json
+{
+  "type": "agent-turn-user-prompt",
+  "thread-id": "b5f6c1c2-1111-2222-3333-444455556666",
+  "turn-id": "12345",
+  "cwd": "/Users/alice/projects/example",
+  "prompt": {
+    "prompt-type": "exec-approval",
+    "command": ["bash", "-lc", "git push origin main"],
+    "reason": "Command needs approval"
+  }
+}
+```
+
 When the agent finishes processing the turn, you'll receive another payload:
 
 ```json
@@ -673,7 +689,7 @@ When the agent finishes processing the turn, you'll receive another payload:
 }
 ```
 
-The `"type"` property will always be set. Currently, `"agent-turn-start"` is emitted when a user submission begins processing, `"agent-turn-stop"` fires when a running turn is cancelled (for example, when you press <kbd>Esc</kbd> in the TUI), and `"agent-turn-complete"` fires when the agent finishes responding.
+The `"type"` property will always be set. Currently, `"agent-turn-start"` is emitted when a user submission begins processing (and again after you respond to an in-progress prompt), `"agent-turn-user-prompt"` fires when Codex is waiting for you to approve an action, `"agent-turn-stop"` fires when a running turn is cancelled (for example, when you press <kbd>Esc</kbd> in the TUI), and `"agent-turn-complete"` fires when the agent finishes responding.
 
 `"thread-id"` contains a string that identifies the Codex session that produced the notification; you can use it to correlate multiple turns that belong to the same task.
 
@@ -718,6 +734,11 @@ def main() -> int:
             title = "Codex: Turn Stopped"
             input_messages = notification.get("input-messages", [])
             message = " ".join(input_messages)
+        case "agent-turn-user-prompt":
+            prompt = notification.get("prompt", {})
+            prompt_type = prompt.get("prompt-type", "action")
+            title = "Codex: Approval Requested"
+            message = f"Awaiting your response for {prompt_type}"
         case _:
             print(f"not sending a push notification for: {notification_type}")
             return 0
@@ -753,7 +774,7 @@ notify = ["python3", "/Users/mbolin/.codex/notify.py"]
 ```
 
 > [!NOTE]
-> Use `notify` for automation and integrations: Codex invokes your external program with a single JSON argument for each event, independent of the TUI. If you only want lightweight desktop notifications while using the TUI, prefer `tui.notifications`, which uses terminal escape codes and requires no external program. You can enable both; `tui.notifications` covers in‑TUI alerts (e.g., approval prompts), while `notify` is best for system‑level hooks or custom notifiers. `notify` emits `agent-turn-start`, `agent-turn-stop`, and `agent-turn-complete`, whereas `tui.notifications` supports `agent-turn-complete` and `approval-requested` with optional filtering.
+> Use `notify` for automation and integrations: Codex invokes your external program with a single JSON argument for each event, independent of the TUI. If you only want lightweight desktop notifications while using the TUI, prefer `tui.notifications`, which uses terminal escape codes and requires no external program. You can enable both; `tui.notifications` covers in‑TUI alerts (e.g., approval prompts), while `notify` is best for system‑level hooks or custom notifiers. `notify` emits `agent-turn-start`, `agent-turn-user-prompt`, `agent-turn-stop`, and `agent-turn-complete`, whereas `tui.notifications` supports `agent-turn-complete` and `approval-requested` with optional filtering.
 
 ### hide_agent_reasoning
 

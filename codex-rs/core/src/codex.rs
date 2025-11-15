@@ -120,6 +120,7 @@ use crate::unified_exec::UnifiedExecSessionManager;
 use crate::user_instructions::DeveloperInstructions;
 use crate::user_instructions::UserInstructions;
 use crate::user_notification::UserNotification;
+use crate::user_notification::UserPromptNotification;
 use crate::util::backoff;
 use codex_async_utils::OrCancelExt;
 use codex_otel::otel_event_manager::OtelEventManager;
@@ -891,6 +892,13 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ExecApproval {
+                command: command.clone(),
+                reason: reason.clone(),
+            },
+        );
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -930,6 +938,14 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ApplyPatchApproval {
+                files: prompt_files,
+                reason: reason.clone(),
+            },
+        );
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
             changes,
@@ -941,19 +957,26 @@ impl Session {
     }
 
     pub async fn notify_approval(&self, sub_id: &str, decision: ReviewDecision) {
-        let entry = {
+        let (entry, turn_context) = {
             let mut active = self.active_turn.lock().await;
             match active.as_mut() {
                 Some(at) => {
+                    let ctx = at
+                        .tasks
+                        .get(sub_id)
+                        .map(|task| Arc::clone(&task.turn_context));
                     let mut ts = at.turn_state.lock().await;
-                    ts.remove_pending_approval(sub_id)
+                    (ts.remove_pending_approval(sub_id), ctx)
                 }
-                None => None,
+                None => (None, None),
             }
         };
         match entry {
             Some(tx_approve) => {
                 tx_approve.send(decision).ok();
+                if let Some(ctx) = turn_context {
+                    self.notify_turn_start_from_history(ctx).await;
+                }
             }
             None => {
                 warn!("No pending approval found for sub_id: {sub_id}");
@@ -1313,6 +1336,36 @@ impl Session {
 
     pub(crate) fn conversation_id(&self) -> ConversationId {
         self.conversation_id
+    }
+
+    fn notify_turn_start_with_messages(
+        &self,
+        turn_context: &TurnContext,
+        input_messages: Vec<String>,
+    ) {
+        self.notifier().notify(&UserNotification::AgentTurnStart {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
+    async fn notify_turn_start_from_history(&self, turn_context: Arc<TurnContext>) {
+        let mut history = self.clone_history().await;
+        let turn_input = history.get_history_for_prompt();
+        let input_messages = collect_user_messages(&turn_input);
+        self.notify_turn_start_with_messages(turn_context.as_ref(), input_messages);
+    }
+
+    fn notify_turn_user_prompt(&self, turn_context: &TurnContext, prompt: UserPromptNotification) {
+        self.notifier()
+            .notify(&UserNotification::AgentTurnUserPrompt {
+                thread_id: self.conversation_id.to_string(),
+                turn_id: turn_context.sub_id.clone(),
+                cwd: turn_context.cwd.display().to_string(),
+                prompt,
+            });
     }
 
     pub(crate) fn user_shell(&self) -> &shell::Shell {
@@ -1853,12 +1906,10 @@ pub(crate) async fn run_task(
             .map(|user_message| user_message.message())
             .collect::<Vec<String>>();
         if !turn_start_notified {
-            sess.notifier().notify(&UserNotification::AgentTurnStart {
-                thread_id: sess.conversation_id.to_string(),
-                turn_id: turn_context.sub_id.clone(),
-                cwd: turn_context.cwd.display().to_string(),
-                input_messages: turn_input_messages.clone(),
-            });
+            sess.notify_turn_start_with_messages(
+                turn_context.as_ref(),
+                turn_input_messages.clone(),
+            );
             turn_start_notified = true;
         }
         match run_turn(

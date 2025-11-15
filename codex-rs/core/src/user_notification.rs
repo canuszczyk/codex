@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::path::PathBuf;
 use tracing::error;
 use tracing::warn;
 
@@ -46,6 +47,7 @@ impl UserNotifier {
 /// program.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum UserNotification {
     #[serde(rename_all = "kebab-case")]
     AgentTurnStart {
@@ -55,6 +57,13 @@ pub(crate) enum UserNotification {
 
         /// Messages that the user sent to the agent to initiate the turn.
         input_messages: Vec<String>,
+    },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnUserPrompt {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        prompt: UserPromptNotification,
     },
     #[serde(rename_all = "kebab-case")]
     AgentTurnComplete {
@@ -76,6 +85,21 @@ pub(crate) enum UserNotification {
 
         /// Messages that the user sent to the agent to initiate the turn.
         input_messages: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "prompt-type", rename_all = "kebab-case")]
+pub(crate) enum UserPromptNotification {
+    ExecApproval {
+        command: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    ApplyPatchApproval {
+        files: Vec<PathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
 }
 
@@ -123,6 +147,21 @@ mod tests {
         assert_eq!(
             stop_serialized,
             r#"{"type":"agent-turn-stop","thread-id":"b5f6c1c2-1111-2222-3333-444455556666","turn-id":"54321","cwd":"/Users/example/project","input-messages":["hello world"]}"#
+        );
+
+        let prompt_notification = UserNotification::AgentTurnUserPrompt {
+            thread_id: "thread-1".to_string(),
+            turn_id: "turn-2".to_string(),
+            cwd: "/tmp".to_string(),
+            prompt: UserPromptNotification::ExecApproval {
+                command: vec!["bash".to_string(), "-lc".to_string(), "ls".to_string()],
+                reason: Some("safety".to_string()),
+            },
+        };
+        let prompt_serialized = serde_json::to_string(&prompt_notification)?;
+        assert_eq!(
+            prompt_serialized,
+            r#"{"type":"agent-turn-user-prompt","thread-id":"thread-1","turn-id":"turn-2","cwd":"/tmp","prompt":{"prompt-type":"exec-approval","command":["bash","-lc","ls"],"reason":"safety"}}"#
         );
         Ok(())
     }

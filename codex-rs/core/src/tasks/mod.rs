@@ -19,7 +19,7 @@ use tracing::warn;
 use crate::AuthManager;
 use crate::codex::Session;
 use crate::codex::TurnContext;
-use crate::parse_turn_item;
+use crate::compact::collect_user_messages;
 use crate::protocol::EventMsg;
 use crate::protocol::TaskCompleteEvent;
 use crate::protocol::TurnAbortReason;
@@ -28,7 +28,6 @@ use crate::state::ActiveTurn;
 use crate::state::RunningTask;
 use crate::state::TaskKind;
 use crate::user_notification::UserNotification;
-use codex_protocol::items::TurnItem;
 use codex_protocol::user_input::UserInput;
 
 pub(crate) use compact::CompactTask;
@@ -233,13 +232,7 @@ impl Session {
     async fn notify_turn_stopped(self: &Arc<Self>, turn_context: Arc<TurnContext>) {
         let mut history = self.clone_history().await;
         let turn_input = history.get_history_for_prompt();
-        let input_messages = turn_input
-            .iter()
-            .filter_map(|item| match parse_turn_item(item) {
-                Some(TurnItem::UserMessage(user_message)) => Some(user_message.message()),
-                _ => None,
-            })
-            .collect::<Vec<String>>();
+        let input_messages = collect_user_messages(&turn_input);
 
         self.notifier().notify(&UserNotification::AgentTurnStop {
             thread_id: self.conversation_id().to_string(),
