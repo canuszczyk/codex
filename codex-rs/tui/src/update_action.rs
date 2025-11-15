@@ -1,9 +1,9 @@
 /// Update action the CLI should perform after the TUI exits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateAction {
-    /// Update via `npm install -g @openai/codex@latest`.
+    /// Update via `npm install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz`.
     NpmGlobalLatest,
-    /// Update via `bun install -g @openai/codex@latest`.
+    /// Update via `bun install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz`.
     BunGlobalLatest,
     /// Update via `brew upgrade codex`.
     BrewUpgrade,

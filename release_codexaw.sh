@@ -65,4 +65,4 @@ fi
 echo
 echo "Release created for ${TAG}."
 echo "Install with:"
-echo "  npm install -g https://github.com/$(git config --get remote.origin.url | sed -n 's#.*github.com[:/]\(.*\)\.git#\1#p')/releases/download/${TAG}/codexaw.tgz"
+echo "  npm install -g https://github.com/$(git config --get remote.origin.url | sed -n 's#.*github.com[:/]\(.*\)\.git#\1#p')/releases/latest/download/codexaw.tgz"

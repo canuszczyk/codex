@@ -33,7 +33,7 @@ pub(crate) const WSL_INSTRUCTIONS: &str = r#"Install WSL2 by opening PowerShell 
     nvm install 22
 
     # Install and run Codex in WSL
-    npm install --global @openai/codex
+    npm install --global https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz
     codex
 
     # Additional details and instructions for how to install and run Codex in WSL:
