@@ -227,7 +227,7 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
 fn context_window_line(percent: Option<i64>) -> Line<'static> {
     let percent = percent.unwrap_or(100).clamp(0, 100);
     Line::from(vec![
-        PRODUCT_NAME.cyan().into(),
+        PRODUCT_NAME.cyan(),
         format!(" ({CODEX_CLI_VERSION})").dim(),
         " ".into(),
         format!("{percent}% context left").dim(),

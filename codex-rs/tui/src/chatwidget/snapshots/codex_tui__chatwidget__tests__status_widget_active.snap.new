@@ -1,0 +1,12 @@
+---
+source: tui/src/chatwidget/tests.rs
+assertion_line: 2134
+expression: terminal.backend()
+---
+"                                                                                "
+"• Analyzing (0s • esc to interrupt)                                             "
+"                                                                                "
+"                                                                                "
+"› Ask Codex to do anything                                                      "
+"                                                                                "
+"  codexAW (0.61.0) 100% context left · ? for shortcuts                          "
