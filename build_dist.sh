@@ -33,7 +33,7 @@ fi
 
 BUILD_VERSION=${VERSION_OVERRIDE:-$ORIG_VERSION}
 pushd "$CODEX_RS_DIR" >/dev/null
-CODEX_VERSION_OVERRIDE="$BUILD_VERSION" CARGO_TARGET_DIR="$CARGO_TARGET_DIR_OVERRIDE" cargo build --release -p codex-cli
+CODEX_VERSION_OVERRIDE="$BUILD_VERSION" CARGO_TARGET_DIR="$CARGO_TARGET_DIR_OVERRIDE" cargo build --release -j 2 -p codex-cli
 popd >/dev/null
 LINUX_VENDOR="$ROOT_DIR/codex-cli/vendor/x86_64-unknown-linux-musl/codex"
 mkdir -p "$LINUX_VENDOR"
