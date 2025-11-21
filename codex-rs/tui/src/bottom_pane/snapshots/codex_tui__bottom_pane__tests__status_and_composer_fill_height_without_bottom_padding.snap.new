@@ -1,0 +1,11 @@
+---
+source: tui/src/bottom_pane/mod.rs
+assertion_line: 710
+expression: "render_snapshot(&pane, area)"
+---
+• Working (0s • esc to interru
+                              
+                              
+› Ask Codex to do anything    
+                              
+  codexAW (0.61.0) 100% contex

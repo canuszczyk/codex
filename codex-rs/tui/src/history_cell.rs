@@ -581,11 +581,7 @@ pub(crate) fn new_session_info(
     let SessionConfiguredEvent {
         model,
         reasoning_effort,
-        session_id: _,
-        history_log_id: _,
-        history_entry_count: _,
-        initial_messages: _,
-        rollout_path: _,
+        ..
     } = event;
     SessionInfoCell(if is_first_event {
         // Header box rendered as history (so it appears at the very top)
@@ -709,6 +705,7 @@ impl SessionHeaderHistoryCell {
             ReasoningEffortConfig::Low => "low",
             ReasoningEffortConfig::Medium => "medium",
             ReasoningEffortConfig::High => "high",
+            ReasoningEffortConfig::XHigh => "xhigh",
             ReasoningEffortConfig::None => "none",
         })
     }
@@ -1015,10 +1012,8 @@ fn try_new_completed_mcp_tool_call_with_image_output(
 }
 
 #[allow(clippy::disallowed_methods)]
-pub(crate) fn new_warning_event(message: String) -> PlainHistoryCell {
-    PlainHistoryCell {
-        lines: vec![vec![format!("⚠ {message}").yellow()].into()],
-    }
+pub(crate) fn new_warning_event(message: String) -> PrefixedWrappedHistoryCell {
+    PrefixedWrappedHistoryCell::new(message.yellow(), "⚠ ".yellow(), "  ")
 }
 
 #[derive(Debug)]
