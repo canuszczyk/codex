@@ -66,7 +66,6 @@ use crate::context_manager::ContextManager;
 use crate::environment_context::EnvironmentContext;
 use crate::error::CodexErr;
 use crate::error::Result as CodexResult;
-use crate::error::http_status_code_value;
 #[cfg(test)]
 use crate::exec::StreamOutput;
 use crate::mcp::auth::compute_auth_statuses;
@@ -123,7 +122,7 @@ use crate::user_notification::UserNotification;
 use crate::user_notification::UserPromptNotification;
 use crate::util::backoff;
 use codex_async_utils::OrCancelExt;
-use codex_execpolicy2::Policy as ExecPolicy;
+use codex_execpolicy::Policy as ExecPolicy;
 use codex_otel::otel_event_manager::OtelEventManager;
 use codex_protocol::config_types::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
@@ -135,8 +134,6 @@ use codex_protocol::protocol::InitialHistory;
 use codex_protocol::user_input::UserInput;
 use codex_utils_readiness::Readiness;
 use codex_utils_readiness::ReadinessFlag;
-use codex_utils_tokenizer::warm_model_cache;
-use reqwest::StatusCode;
 
 /// The high-level interface to the Codex system.
 /// It operates as a queue pair where you send submissions and receive events.
@@ -496,7 +493,7 @@ impl Session {
         // - load history metadata
         let rollout_fut = RolloutRecorder::new(&config, rollout_params);
 
-        let default_shell_fut = shell::default_user_shell();
+        let default_shell = shell::default_user_shell();
         let history_meta_fut = crate::message_history::history_metadata(&config);
         let auth_statuses_fut = compute_auth_statuses(
             config.mcp_servers.iter(),
@@ -504,12 +501,8 @@ impl Session {
         );
 
         // Join all independent futures.
-        let (rollout_recorder, default_shell, (history_log_id, history_entry_count), auth_statuses) = tokio::join!(
-            rollout_fut,
-            default_shell_fut,
-            history_meta_fut,
-            auth_statuses_fut
-        );
+        let (rollout_recorder, (history_log_id, history_entry_count), auth_statuses) =
+            tokio::join!(rollout_fut, history_meta_fut, auth_statuses_fut);
 
         let rollout_recorder = rollout_recorder.map_err(|e| {
             error!("failed to initialize rollout recorder: {e:#}");
@@ -561,9 +554,6 @@ impl Session {
 
         // Create the mutable state for the Session.
         let state = SessionState::new(session_configuration.clone());
-
-        // Warm the tokenizer cache for the session model without blocking startup.
-        warm_model_cache(&session_configuration.model);
 
         let services = SessionServices {
             mcp_connection_manager: Arc::new(RwLock::new(McpConnectionManager::default())),
@@ -937,6 +927,7 @@ impl Session {
         );
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
+            turn_id: turn_context.sub_id.clone(),
             changes,
             reason,
             grant_root,
@@ -1081,7 +1072,7 @@ impl Session {
             Some(turn_context.cwd.clone()),
             Some(turn_context.approval_policy),
             Some(turn_context.sandbox_policy.clone()),
-            Some(self.user_shell().clone()),
+            self.user_shell().clone(),
         )));
         items
     }
@@ -1221,11 +1212,9 @@ impl Session {
         &self,
         turn_context: &TurnContext,
         message: impl Into<String>,
-        http_status_code: Option<StatusCode>,
     ) {
         let event = EventMsg::StreamError(StreamErrorEvent {
             message: message.into(),
-            http_status_code: http_status_code_value(http_status_code),
         });
         self.send_event(turn_context, event).await;
     }
@@ -1751,7 +1740,6 @@ mod handlers {
                 id: sub_id.clone(),
                 msg: EventMsg::Error(ErrorEvent {
                     message: "Failed to shutdown rollout recorder".to_string(),
-                    http_status_code: None,
                 }),
             };
             sess.send_event_raw(event).await;
@@ -2032,8 +2020,10 @@ pub(crate) async fn run_task(
             }
             Err(e) => {
                 info!("Turn error: {e:#}");
-                sess.send_event(&turn_context, EventMsg::Error(e.to_error_event(None)))
-                    .await;
+                let event = EventMsg::Error(ErrorEvent {
+                    message: e.to_string(),
+                });
+                sess.send_event(&turn_context, event).await;
                 // let the user continue the conversation
                 break;
             }
@@ -2157,7 +2147,6 @@ async fn run_turn(
                     sess.notify_stream_error(
                         &turn_context,
                         format!("Reconnecting... {retries}/{max_retries}"),
-                        e.http_status_code(),
                     )
                     .await;
 
@@ -2476,6 +2465,7 @@ mod tests {
     use crate::config::ConfigOverrides;
     use crate::config::ConfigToml;
     use crate::exec::ExecToolCallOutput;
+    use crate::shell::default_user_shell;
     use crate::tools::format_exec_output_str;
 
     use crate::protocol::CompactedItem;
@@ -2703,7 +2693,7 @@ mod tests {
             cwd: config.cwd.clone(),
             original_config_do_not_use: Arc::clone(&config),
             features: Features::default(),
-            exec_policy: Arc::new(codex_execpolicy2::Policy::empty()),
+            exec_policy: Arc::new(ExecPolicy::empty()),
             session_source: SessionSource::Exec,
         };
 
@@ -2715,7 +2705,7 @@ mod tests {
             unified_exec_manager: UnifiedExecSessionManager::default(),
             notifier: UserNotifier::new(None),
             rollout: Mutex::new(None),
-            user_shell: shell::Shell::Unknown,
+            user_shell: default_user_shell(),
             show_raw_agent_reasoning: config.show_raw_agent_reasoning,
             auth_manager: Arc::clone(&auth_manager),
             otel_event_manager: otel_event_manager.clone(),
@@ -2781,7 +2771,7 @@ mod tests {
             cwd: config.cwd.clone(),
             original_config_do_not_use: Arc::clone(&config),
             features: Features::default(),
-            exec_policy: Arc::new(codex_execpolicy2::Policy::empty()),
+            exec_policy: Arc::new(ExecPolicy::empty()),
             session_source: SessionSource::Exec,
         };
 
@@ -2793,7 +2783,7 @@ mod tests {
             unified_exec_manager: UnifiedExecSessionManager::default(),
             notifier: UserNotifier::new(None),
             rollout: Mutex::new(None),
-            user_shell: shell::Shell::Unknown,
+            user_shell: default_user_shell(),
             show_raw_agent_reasoning: config.show_raw_agent_reasoning,
             auth_manager: Arc::clone(&auth_manager),
             otel_event_manager: otel_event_manager.clone(),
