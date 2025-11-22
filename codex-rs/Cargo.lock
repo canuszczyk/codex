@@ -1235,7 +1235,7 @@ dependencies = [
 
 [[package]]
 name = "codex-execpolicy-legacy"
-version = "0.0.0"
+version = "0.61.0"
 dependencies = [
  "allocative",
  "anyhow",

@@ -14,4 +14,4 @@ expression: term.backend().vt100().screen().contents()
 
 › Summarize recent commits
 
-  100% context left
+  codexAW (0.61.0) 100% context left

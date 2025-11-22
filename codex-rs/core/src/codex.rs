@@ -1978,7 +1978,6 @@ pub(crate) async fn run_task(
                             message: format!(
                                 "Conversation is still above the token limit after automatic summarization (limit {limit_str}, current {current_tokens}). Please start a new session or trim your input."
                             ),
-                            http_status_code: None,
                         });
                         sess.send_event(&turn_context, event).await;
                         break;
