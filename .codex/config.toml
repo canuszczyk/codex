@@ -1,0 +1,5 @@
+# Repository-specific Codex configuration used to test local hooks/notifications.
+# When this repo is loaded via codex, this override should take precedence over
+# any notify command configured in CODEX_HOME/config.toml.
+notify = ["bash", "-lc", "echo repo notify hook"]
+
