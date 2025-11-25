@@ -1,6 +1,0 @@
----
-source: tui/src/bottom_pane/footer.rs
-assertion_line: 398
-expression: terminal.backend()
----
-"  codexAW (0.61.0) 100% context left · ? for shortcuts                          "
