@@ -24,8 +24,16 @@ Codex supports several mechanisms for setting config values:
     - In the first case, the value is the TOML string `"o3"`, while in the second the value is `o3`, which is not valid TOML and therefore treated as the TOML string `"o3"`.
     - Because quotes are interpreted by one's shell, `-c key="true"` will be correctly interpreted in TOML as `key = true` (a boolean) and not `key = "true"` (a string). If for some reason you needed the string `"true"`, you would need to use `-c key='"true"'` (note the two sets of quotes).
 - The `$CODEX_HOME/config.toml` configuration file where the `CODEX_HOME` environment value defaults to `~/.codex`. (Note `CODEX_HOME` will also be where logs and other Codex-related information are stored.)
+- A repository-scoped `.codex/config.toml` file located at the root of your Git checkout (the directory that contains `.git`). When present this file overrides the settings defined in `$CODEX_HOME/config.toml`, making it easy to customize notifications, hooks, or other preferences per project. If the current working directory is not inside a Git repository, Codex instead looks for `.codex/config.toml` in the working directory itself.
 
 Both the `--config` flag and the `config.toml` file support the following options:
+
+Codex applies configuration layers in the following order (later entries override earlier ones):
+
+1. `$CODEX_HOME/config.toml`
+2. Repository `.codex/config.toml`
+3. CLI `--config` overrides
+4. `managed_config.toml` and managed preferences (when provided by IT/MDM tooling)
 
 ## Feature flags
 

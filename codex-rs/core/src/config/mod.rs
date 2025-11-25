@@ -287,6 +287,7 @@ impl Config {
             &codex_home,
             cli_overrides,
             crate::config_loader::LoaderOverrides::default(),
+            overrides.cwd.as_deref(),
         )
         .await?;
 
@@ -302,11 +303,13 @@ impl Config {
 pub async fn load_config_as_toml_with_cli_overrides(
     codex_home: &Path,
     cli_overrides: Vec<(String, TomlValue)>,
+    repo_cwd_override: Option<&Path>,
 ) -> std::io::Result<ConfigToml> {
     let root_value = load_resolved_config(
         codex_home,
         cli_overrides,
         crate::config_loader::LoaderOverrides::default(),
+        repo_cwd_override,
     )
     .await?;
 
@@ -322,8 +325,10 @@ async fn load_resolved_config(
     codex_home: &Path,
     cli_overrides: Vec<(String, TomlValue)>,
     overrides: crate::config_loader::LoaderOverrides,
+    repo_cwd_override: Option<&Path>,
 ) -> std::io::Result<TomlValue> {
-    let layers = load_config_layers_with_overrides(codex_home, overrides).await?;
+    let layers =
+        load_config_layers_with_overrides(codex_home, overrides, repo_cwd_override).await?;
     Ok(apply_overlays(layers, cli_overrides))
 }
 
@@ -1869,7 +1874,8 @@ trust_level = "trusted"
             managed_preferences_base64: None,
         };
 
-        let root_value = load_resolved_config(codex_home.path(), Vec::new(), overrides).await?;
+        let root_value =
+            load_resolved_config(codex_home.path(), Vec::new(), overrides, None).await?;
         let cfg: ConfigToml = root_value.try_into().map_err(|e| {
             tracing::error!("Failed to deserialize overridden config: {e}");
             std::io::Error::new(std::io::ErrorKind::InvalidData, e)
@@ -1987,6 +1993,7 @@ trust_level = "trusted"
             codex_home.path(),
             vec![("model".to_string(), TomlValue::String("cli".to_string()))],
             overrides,
+            None,
         )
         .await?;
 

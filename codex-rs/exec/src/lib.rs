@@ -173,7 +173,13 @@ pub async fn run_main(cli: Cli, codex_linux_sandbox_exe: Option<PathBuf>) -> any
             }
         };
 
-        match load_config_as_toml_with_cli_overrides(&codex_home, cli_kv_overrides.clone()).await {
+        match load_config_as_toml_with_cli_overrides(
+            &codex_home,
+            cli_kv_overrides.clone(),
+            cwd.as_deref(),
+        )
+        .await
+        {
             Ok(config_toml) => config_toml,
             Err(err) => {
                 eprintln!("Error loading config.toml: {err}");

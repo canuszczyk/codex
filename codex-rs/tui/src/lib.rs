@@ -152,14 +152,19 @@ pub async fn run_main(
     };
 
     #[allow(clippy::print_stderr)]
-    let config_toml =
-        match load_config_as_toml_with_cli_overrides(&codex_home, cli_kv_overrides.clone()).await {
-            Ok(config_toml) => config_toml,
-            Err(err) => {
-                eprintln!("Error loading config.toml: {err}");
-                std::process::exit(1);
-            }
-        };
+    let config_toml = match load_config_as_toml_with_cli_overrides(
+        &codex_home,
+        cli_kv_overrides.clone(),
+        cli.cwd.as_deref(),
+    )
+    .await
+    {
+        Ok(config_toml) => config_toml,
+        Err(err) => {
+            eprintln!("Error loading config.toml: {err}");
+            std::process::exit(1);
+        }
+    };
 
     let model_provider_override = if cli.oss {
         let resolved = resolve_oss_provider(
