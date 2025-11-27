@@ -26,6 +26,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
     rm -rf /var/lib/apt/lists/*
 
+# Install pnpm to the prefix the project expects
+RUN mkdir -p /workspace/.local && \
+    npm install pnpm --prefix /workspace/.local
+
 # Work as root (simplest, matches other repos)
 WORKDIR /workspace
 
