@@ -29,7 +29,7 @@
     "--shm-size", "2g"
   ],
 
-  "postCreateCommand": "bash .devcontainer/post-create-command.sh",
+  "postCreateCommand": "bash -lc \"mkdir -p ${containerWorkspaceFolder}/.local && npm install -g pnpm@10.8.1 --prefix ${containerWorkspaceFolder}/.local || true; bash ${containerWorkspaceFolder}/.devcontainer/post-create-command.sh\"",
   "postStartCommand": "bash .devcontainer/post-create-command.sh --quick",
 
   "customizations": {

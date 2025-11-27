@@ -42,6 +42,8 @@ log() {
 }
 
 ensure_pnpm() {
+  local pnpm_version="${PNPM_VERSION:-10.8.1}"
+
   # release_codexaw.sh expects pnpm at:
   #   /workspaces/codex/.local/lib/node_modules/pnpm/dist/pnpm.cjs
   # this script runs with CWD = workspace root, so .local is correct here
@@ -54,9 +56,9 @@ ensure_pnpm() {
     return
   fi
 
-  log "Installing pnpm into .local prefix for release_codexaw.sh"
+  log "Installing pnpm@${pnpm_version} into .local prefix for release_codexaw.sh"
   mkdir -p .local
-  npm install pnpm --prefix .local || true
+  npm install -g "pnpm@${pnpm_version}" --prefix .local || true
 }
 
 bootstrap_app() {
