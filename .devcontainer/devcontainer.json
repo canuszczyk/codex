@@ -1,27 +1,32 @@
 {
   "name": "Codex",
+
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "..",
-    "platform": "linux/arm64"
+    "context": ".."
   },
 
-  /* Force VS Code to run the container as arm64 in
-     case your host is x86 (or vice-versa). */
-  "runArgs": ["--platform=linux/arm64"],
+  // No platform override – let Docker use linux/amd64 like the host
+  // "runArgs": ["--platform=linux/arm64"],  // ❌ remove this
 
   "containerEnv": {
     "RUST_BACKTRACE": "1",
     "CARGO_TARGET_DIR": "${containerWorkspaceFolder}/codex-rs/target-arm64"
   },
 
+  // Let the Dockerfile's USER ubuntu stand, don't try to UID-mutate a second image
+  "updateRemoteUserUID": false,
   "remoteUser": "ubuntu",
+
   "customizations": {
     "vscode": {
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash"
       },
-      "extensions": ["rust-lang.rust-analyzer", "tamasfe.even-better-toml"]
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ]
     }
   }
 }
