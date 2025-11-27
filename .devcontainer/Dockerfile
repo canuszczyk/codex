@@ -1,27 +1,32 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-# enable 'universe' because musl-tools & clang live there
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    software-properties-common && \
-    add-apt-repository --yes universe
 
-# now install build deps
+# Enable 'universe' and install build deps
 RUN apt-get update && \
+    apt-get install -y --no-install-recommends software-properties-common && \
+    add-apt-repository --yes universe && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential curl git ca-certificates \
-    pkg-config clang musl-tools libssl-dev just && \
+        build-essential \
+        curl \
+        git \
+        ca-certificates \
+        pkg-config \
+        clang \
+        musl-tools \
+        libssl-dev \
+        just \
+        sudo && \
     rm -rf /var/lib/apt/lists/*
 
-# Ubuntu 24.04 ships with user 'ubuntu' already created with UID 1000.
-USER ubuntu
+# Stay as root; devcontainers will attach as root by default
+WORKDIR /workspace
 
-# install Rust + musl target as dev user
+# Install Rust + musl target as root
 RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
     ~/.cargo/bin/rustup target add aarch64-unknown-linux-musl && \
     ~/.cargo/bin/rustup component add clippy rustfmt
 
-ENV PATH="/home/ubuntu/.cargo/bin:${PATH}"
-
-WORKDIR /workspace
+# Make cargo/rustup available in PATH
+ENV PATH="/root/.cargo/bin:${PATH}"

@@ -6,17 +6,13 @@
     "context": ".."
   },
 
-  // No platform override – let Docker use linux/amd64 like the host
-  // "runArgs": ["--platform=linux/arm64"],  // ❌ remove this
-
   "containerEnv": {
     "RUST_BACKTRACE": "1",
     "CARGO_TARGET_DIR": "${containerWorkspaceFolder}/codex-rs/target-arm64"
   },
 
-  // Let the Dockerfile's USER ubuntu stand, don't try to UID-mutate a second image
+  // Let devcontainers pick the user (root); don't try to UID-mutate
   "updateRemoteUserUID": false,
-  "remoteUser": "ubuntu",
 
   "customizations": {
     "vscode": {
