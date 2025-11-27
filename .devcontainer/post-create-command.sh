@@ -41,6 +41,24 @@ log() {
   printf "\n\033[1;36m[setup]\033[0m %s\n" "$*"
 }
 
+ensure_pnpm() {
+  # release_codexaw.sh expects pnpm at:
+  #   /workspaces/codex/.local/lib/node_modules/pnpm/dist/pnpm.cjs
+  # this script runs with CWD = workspace root, so .local is correct here
+  if [ -f .local/lib/node_modules/pnpm/dist/pnpm.cjs ]; then
+    return
+  fi
+
+  if ! command -v npm >/dev/null 2>&1; then
+    log "npm not found; cannot install pnpm into .local"
+    return
+  fi
+
+  log "Installing pnpm into .local prefix for release_codexaw.sh"
+  mkdir -p .local
+  npm install pnpm --prefix .local || true
+}
+
 bootstrap_app() {
   if [[ -n "$APP_BOOTSTRAP" ]]; then
     log "Running APP_BOOTSTRAP: $APP_BOOTSTRAP"
@@ -122,12 +140,14 @@ main() {
       exit 0
       ;;
     --quick)
+      ensure_pnpm
       bootstrap_app
       log "Done."
       exit 0
       ;;
   esac
 
+  ensure_pnpm
   bootstrap_app
   log "Done."
 }
