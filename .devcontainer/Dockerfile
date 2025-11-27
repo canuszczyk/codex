@@ -20,7 +20,13 @@ RUN apt-get update && \
         sudo && \
     rm -rf /var/lib/apt/lists/*
 
-# Stay as root; devcontainers will attach as root by default
+# Install Node.js 22.x
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Work as root (simplest, matches other repos)
 WORKDIR /workspace
 
 # Install Rust + musl target as root
