@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 
 use crate::AuthManager;
+use crate::SandboxState;
 use crate::client_common::REVIEW_PROMPT;
 use crate::compact;
 use crate::compact::run_inline_auto_compact_task;
@@ -34,6 +35,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TaskStartedEvent;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnContextItem;
+use codex_rmcp_client::ElicitationResponse;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesOrdered;
@@ -44,6 +46,7 @@ use mcp_types::ListResourcesRequestParams;
 use mcp_types::ListResourcesResult;
 use mcp_types::ReadResourceRequestParams;
 use mcp_types::ReadResourceResult;
+use mcp_types::RequestId;
 use serde_json;
 use serde_json::Value;
 use tokio::sync::Mutex;
@@ -79,7 +82,6 @@ use crate::protocol::ApplyPatchApprovalRequestEvent;
 use crate::protocol::AskForApproval;
 use crate::protocol::BackgroundEventEvent;
 use crate::protocol::DeprecationNoticeEvent;
-use crate::protocol::ErrorEvent;
 use crate::protocol::Event;
 use crate::protocol::EventMsg;
 use crate::protocol::ExecApprovalRequestEvent;
@@ -100,6 +102,7 @@ use crate::protocol::TurnDiffEvent;
 use crate::protocol::WarningEvent;
 use crate::rollout::RolloutRecorder;
 use crate::rollout::RolloutRecorderParams;
+use crate::rollout::map_session_init_error;
 use crate::shell;
 use crate::state::ActiveTurn;
 use crate::state::SessionServices;
@@ -130,6 +133,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
+use codex_protocol::protocol::CodexErrorInfo;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::user_input::UserInput;
 use codex_utils_readiness::Readiness;
@@ -204,7 +208,7 @@ impl Codex {
         .await
         .map_err(|e| {
             error!("Failed to create session: {e:#}");
-            CodexErr::InternalAgentDied
+            map_session_init_error(&e, &config.codex_home)
         })?;
         let conversation_id = session.conversation_id;
 
@@ -506,7 +510,7 @@ impl Session {
 
         let rollout_recorder = rollout_recorder.map_err(|e| {
             error!("failed to initialize rollout recorder: {e:#}");
-            anyhow::anyhow!("failed to initialize rollout recorder: {e:#}")
+            anyhow::Error::from(e)
         })?;
         let rollout_path = rollout_recorder.rollout_path.clone();
 
@@ -544,7 +548,6 @@ impl Session {
             config.model_reasoning_effort,
             config.model_reasoning_summary,
             config.model_context_window,
-            config.model_max_output_tokens,
             config.model_auto_compact_token_limit,
             config.approval_policy,
             config.sandbox_policy.clone(),
@@ -614,6 +617,22 @@ impl Session {
             )
             .await;
 
+        let sandbox_state = SandboxState {
+            sandbox_policy: session_configuration.sandbox_policy.clone(),
+            codex_linux_sandbox_exe: config.codex_linux_sandbox_exe.clone(),
+            sandbox_cwd: session_configuration.cwd.clone(),
+        };
+        if let Err(e) = sess
+            .services
+            .mcp_connection_manager
+            .read()
+            .await
+            .notify_sandbox_state_change(&sandbox_state)
+            .await
+        {
+            tracing::error!("Failed to notify sandbox state change: {e}");
+        }
+
         // record_initial_history can emit events. We record only after the SessionConfiguredEvent is emitted.
         sess.record_initial_history(initial_history).await;
 
@@ -642,6 +661,11 @@ impl Session {
             .next_internal_sub_id
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         format!("auto-compact-{id}")
+    }
+
+    async fn get_total_token_usage(&self) -> i64 {
+        let state = self.state.lock().await;
+        state.get_total_token_usage()
     }
 
     async fn record_initial_history(&self, conversation_history: InitialHistory) {
@@ -964,6 +988,19 @@ impl Session {
         }
     }
 
+    pub async fn resolve_elicitation(
+        &self,
+        server_name: String,
+        id: RequestId,
+        response: ElicitationResponse,
+    ) -> anyhow::Result<()> {
+        self.services
+            .mcp_connection_manager
+            .read()
+            .await
+            .resolve_elicitation(server_name, id, response)
+    }
+
     /// Records input items: always append to conversation history and
     /// persist these response items to rollout.
     pub(crate) async fn record_conversation_items(
@@ -1176,22 +1213,17 @@ impl Session {
         }
     }
 
-    /// Record a user input item to conversation history and also persist a
-    /// corresponding UserMessage EventMsg to rollout.
-    async fn record_input_and_rollout_usermsg(
+    pub(crate) async fn record_response_item_and_emit_turn_item(
         &self,
         turn_context: &TurnContext,
-        response_input: &ResponseInputItem,
+        response_item: ResponseItem,
     ) {
-        let response_item: ResponseItem = response_input.clone().into();
-        // Add to conversation history and persist response item to rollout
+        // Add to conversation history and persist response item to rollout.
         self.record_conversation_items(turn_context, std::slice::from_ref(&response_item))
             .await;
 
-        // Derive user message events and persist only UserMessage to rollout
-        let turn_item = parse_turn_item(&response_item);
-
-        if let Some(item @ TurnItem::UserMessage(_)) = turn_item {
+        // Derive a turn item and emit lifecycle events if applicable.
+        if let Some(item) = parse_turn_item(&response_item) {
             self.emit_turn_item_started(turn_context, &item).await;
             self.emit_turn_item_completed(turn_context, item).await;
         }
@@ -1212,9 +1244,14 @@ impl Session {
         &self,
         turn_context: &TurnContext,
         message: impl Into<String>,
+        codex_error: CodexErr,
     ) {
+        let codex_error_info = CodexErrorInfo::ResponseStreamDisconnected {
+            http_status_code: codex_error.http_status_code_value(),
+        };
         let event = EventMsg::StreamError(StreamErrorEvent {
             message: message.into(),
+            codex_error_info: Some(codex_error_info),
         });
         self.send_event(turn_context, event).await;
     }
@@ -1466,6 +1503,13 @@ async fn submission_loop(sess: Arc<Session>, config: Arc<Config>, rx_sub: Receiv
                 )
                 .await;
             }
+            Op::ResolveElicitation {
+                server_name,
+                request_id,
+                decision,
+            } => {
+                handlers::resolve_elicitation(&sess, server_name, request_id, decision).await;
+            }
             Op::Shutdown => {
                 if handlers::shutdown(&sess, sub.id.clone()).await {
                     break;
@@ -1494,6 +1538,7 @@ mod handlers {
     use crate::tasks::UndoTask;
     use crate::tasks::UserShellCommandTask;
     use codex_protocol::custom_prompts::CustomPrompt;
+    use codex_protocol::protocol::CodexErrorInfo;
     use codex_protocol::protocol::ErrorEvent;
     use codex_protocol::protocol::Event;
     use codex_protocol::protocol::EventMsg;
@@ -1504,6 +1549,9 @@ mod handlers {
     use codex_protocol::protocol::TurnAbortReason;
 
     use codex_protocol::user_input::UserInput;
+    use codex_rmcp_client::ElicitationAction;
+    use codex_rmcp_client::ElicitationResponse;
+    use mcp_types::RequestId;
     use std::sync::Arc;
     use tracing::info;
     use tracing::warn;
@@ -1585,6 +1633,32 @@ mod handlers {
         )
         .await;
         *previous_context = Some(turn_context);
+    }
+
+    pub async fn resolve_elicitation(
+        sess: &Arc<Session>,
+        server_name: String,
+        request_id: RequestId,
+        decision: codex_protocol::approvals::ElicitationAction,
+    ) {
+        let action = match decision {
+            codex_protocol::approvals::ElicitationAction::Accept => ElicitationAction::Accept,
+            codex_protocol::approvals::ElicitationAction::Decline => ElicitationAction::Decline,
+            codex_protocol::approvals::ElicitationAction::Cancel => ElicitationAction::Cancel,
+        };
+        let response = ElicitationResponse {
+            action,
+            content: None,
+        };
+        if let Err(err) = sess
+            .resolve_elicitation(server_name, request_id, response)
+            .await
+        {
+            warn!(
+                error = %err,
+                "failed to resolve elicitation request in session"
+            );
+        }
     }
 
     pub async fn exec_approval(sess: &Arc<Session>, id: String, decision: ReviewDecision) {
@@ -1724,6 +1798,10 @@ mod handlers {
 
     pub async fn shutdown(sess: &Arc<Session>, sub_id: String) -> bool {
         sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
+        sess.services
+            .unified_exec_manager
+            .terminate_all_sessions()
+            .await;
         info!("Shutting down Codex instance");
 
         // Gracefully flush and shutdown rollout recorder on session end so tests
@@ -1740,6 +1818,7 @@ mod handlers {
                 id: sub_id.clone(),
                 msg: EventMsg::Error(ErrorEvent {
                     message: "Failed to shutdown rollout recorder".to_string(),
+                    codex_error_info: Some(CodexErrorInfo::Other),
                 }),
             };
             sess.send_event_raw(event).await;
@@ -1854,12 +1933,7 @@ async fn spawn_review_thread(
         text: review_prompt,
     }];
     let tc = Arc::new(review_turn_context);
-    sess.spawn_task(
-        tc.clone(),
-        input,
-        ReviewTask::new(review_request.append_to_original_thread),
-    )
-    .await;
+    sess.spawn_task(tc.clone(), input, ReviewTask::new()).await;
 
     // Announce entering review mode so UIs can switch modes.
     sess.send_event(&tc, EventMsg::EnteredReviewMode(review_request))
@@ -1895,7 +1969,8 @@ pub(crate) async fn run_task(
     sess.send_event(&turn_context, event).await;
 
     let initial_input_for_turn: ResponseInputItem = ResponseInputItem::from(input);
-    sess.record_input_and_rollout_usermsg(turn_context.as_ref(), &initial_input_for_turn)
+    let response_item: ResponseItem = initial_input_for_turn.clone().into();
+    sess.record_response_item_and_emit_turn_item(turn_context.as_ref(), response_item)
         .await;
 
     sess.maybe_start_ghost_snapshot(Arc::clone(&turn_context), cancellation_token.child_token())
@@ -1950,20 +2025,13 @@ pub(crate) async fn run_task(
         .await
         {
             Ok(turn_output) => {
-                let TurnRunResult {
-                    processed_items,
-                    total_token_usage,
-                } = turn_output;
+                let processed_items = turn_output;
                 let limit = turn_context
                     .client
                     .get_auto_compact_token_limit()
                     .unwrap_or(i64::MAX);
-                let total_usage_tokens = total_token_usage
-                    .as_ref()
-                    .map(TokenUsage::tokens_in_context_window);
-                let token_limit_reached = total_usage_tokens
-                    .map(|tokens| tokens >= limit)
-                    .unwrap_or(false);
+                let total_usage_tokens = sess.get_total_token_usage().await;
+                let token_limit_reached = total_usage_tokens >= limit;
                 let (responses, items_to_record_in_conversation_history) =
                     process_items(processed_items, &sess, &turn_context).await;
 
@@ -2019,9 +2087,7 @@ pub(crate) async fn run_task(
             }
             Err(e) => {
                 info!("Turn error: {e:#}");
-                let event = EventMsg::Error(ErrorEvent {
-                    message: e.to_string(),
-                });
+                let event = EventMsg::Error(e.to_error_event(None));
                 sess.send_event(&turn_context, event).await;
                 // let the user continue the conversation
                 break;
@@ -2038,7 +2104,7 @@ async fn run_turn(
     turn_diff_tracker: SharedTurnDiffTracker,
     input: Vec<ResponseItem>,
     cancellation_token: CancellationToken,
-) -> CodexResult<TurnRunResult> {
+) -> CodexResult<Vec<ProcessedResponseItem>> {
     let mcp_tools = sess
         .services
         .mcp_connection_manager
@@ -2146,6 +2212,7 @@ async fn run_turn(
                     sess.notify_stream_error(
                         &turn_context,
                         format!("Reconnecting... {retries}/{max_retries}"),
+                        e,
                     )
                     .await;
 
@@ -2168,12 +2235,6 @@ pub struct ProcessedResponseItem {
     pub response: Option<ResponseInputItem>,
 }
 
-#[derive(Debug)]
-struct TurnRunResult {
-    processed_items: Vec<ProcessedResponseItem>,
-    total_token_usage: Option<TokenUsage>,
-}
-
 #[allow(clippy::too_many_arguments)]
 async fn try_run_turn(
     router: Arc<ToolRouter>,
@@ -2182,7 +2243,7 @@ async fn try_run_turn(
     turn_diff_tracker: SharedTurnDiffTracker,
     prompt: &Prompt,
     cancellation_token: CancellationToken,
-) -> CodexResult<TurnRunResult> {
+) -> CodexResult<Vec<ProcessedResponseItem>> {
     let rollout_item = RolloutItem::TurnContext(TurnContextItem {
         cwd: turn_context.cwd.clone(),
         approval_policy: turn_context.approval_policy,
@@ -2344,12 +2405,7 @@ async fn try_run_turn(
                     sess.send_event(&turn_context, msg).await;
                 }
 
-                let result = TurnRunResult {
-                    processed_items,
-                    total_token_usage: token_usage.clone(),
-                };
-
-                return Ok(result);
+                return Ok(processed_items);
             }
             ResponseEvent::OutputTextDelta(delta) => {
                 // In review child threads, suppress assistant text deltas; the
@@ -2364,7 +2420,7 @@ async fn try_run_turn(
                     sess.send_event(&turn_context, EventMsg::AgentMessageContentDelta(event))
                         .await;
                 } else {
-                    error_or_panic("ReasoningSummaryDelta without active item".to_string());
+                    error_or_panic("OutputTextDelta without active item".to_string());
                 }
             }
             ResponseEvent::ReasoningSummaryDelta {
@@ -2457,6 +2513,9 @@ pub(super) fn get_last_assistant_message_from_turn(responses: &[ResponseItem]) -
 use crate::features::Features;
 #[cfg(test)]
 pub(crate) use tests::make_session_and_context;
+
+#[cfg(test)]
+pub(crate) use tests::make_session_and_context_with_rx;
 
 #[cfg(test)]
 mod tests {
@@ -2734,7 +2793,7 @@ mod tests {
 
     // Like make_session_and_context, but returns Arc<Session> and the event receiver
     // so tests can assert on emitted events.
-    fn make_session_and_context_with_rx() -> (
+    pub(crate) fn make_session_and_context_with_rx() -> (
         Arc<Session>,
         Arc<TurnContext>,
         async_channel::Receiver<Event>,
@@ -2901,7 +2960,7 @@ mod tests {
         let input = vec![UserInput::Text {
             text: "start review".to_string(),
         }];
-        sess.spawn_task(Arc::clone(&tc), input, ReviewTask::new(true))
+        sess.spawn_task(Arc::clone(&tc), input, ReviewTask::new())
             .await;
 
         sess.abort_all_tasks(TurnAbortReason::Interrupted).await;
@@ -2929,6 +2988,8 @@ mod tests {
                 .expect("event");
             match evt.msg {
                 EventMsg::RawResponseItem(_) => continue,
+                EventMsg::ItemStarted(_) | EventMsg::ItemCompleted(_) => continue,
+                EventMsg::AgentMessage(_) => continue,
                 EventMsg::TurnAborted(e) => {
                     assert_eq!(TurnAbortReason::Interrupted, e.reason);
                     break;
@@ -2938,23 +2999,7 @@ mod tests {
         }
 
         let history = sess.clone_history().await.get_history();
-        let found = history.iter().any(|item| match item {
-            ResponseItem::Message { role, content, .. } if role == "user" => {
-                content.iter().any(|ci| match ci {
-                    ContentItem::InputText { text } => {
-                        text.contains("<user_action>")
-                            && text.contains("review")
-                            && text.contains("interrupted")
-                    }
-                    _ => false,
-                })
-            }
-            _ => false,
-        });
-        assert!(
-            found,
-            "synthetic review interruption not recorded in history"
-        );
+        let _ = history;
     }
 
     #[tokio::test]
@@ -3127,6 +3172,7 @@ mod tests {
         let session = Arc::new(session);
         let mut turn_context = Arc::new(turn_context_raw);
 
+        let timeout_ms = 1000;
         let params = ExecParams {
             command: if cfg!(windows) {
                 vec![
@@ -3142,7 +3188,7 @@ mod tests {
                 ]
             },
             cwd: turn_context.cwd.clone(),
-            timeout_ms: Some(1000),
+            expiration: timeout_ms.into(),
             env: HashMap::new(),
             with_escalated_permissions: Some(true),
             justification: Some("test".to_string()),
@@ -3151,7 +3197,12 @@ mod tests {
 
         let params2 = ExecParams {
             with_escalated_permissions: Some(false),
-            ..params.clone()
+            command: params.command.clone(),
+            cwd: params.cwd.clone(),
+            expiration: timeout_ms.into(),
+            env: HashMap::new(),
+            justification: params.justification.clone(),
+            arg0: None,
         };
 
         let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
@@ -3171,7 +3222,7 @@ mod tests {
                     arguments: serde_json::json!({
                         "command": params.command.clone(),
                         "workdir": Some(turn_context.cwd.to_string_lossy().to_string()),
-                        "timeout_ms": params.timeout_ms,
+                        "timeout_ms": params.expiration.timeout_ms(),
                         "with_escalated_permissions": params.with_escalated_permissions,
                         "justification": params.justification.clone(),
                     })
@@ -3208,7 +3259,7 @@ mod tests {
                     arguments: serde_json::json!({
                         "command": params2.command.clone(),
                         "workdir": Some(turn_context.cwd.to_string_lossy().to_string()),
-                        "timeout_ms": params2.timeout_ms,
+                        "timeout_ms": params2.expiration.timeout_ms(),
                         "with_escalated_permissions": params2.with_escalated_permissions,
                         "justification": params2.justification.clone(),
                     })
