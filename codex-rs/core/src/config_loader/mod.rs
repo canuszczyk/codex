@@ -50,7 +50,7 @@ pub async fn load_config_as_toml(codex_home: &Path) -> io::Result<TomlValue> {
 }
 
 pub async fn load_config_layers(codex_home: &Path) -> io::Result<LoadedConfigLayers> {
-    load_config_layers_with_overrides(codex_home, LoaderOverrides::default()).await
+    load_config_layers_with_overrides(codex_home, LoaderOverrides::default(), None).await
 }
 
 fn default_empty_table() -> TomlValue {

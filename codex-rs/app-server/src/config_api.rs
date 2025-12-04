@@ -202,8 +202,12 @@ impl ConfigApi {
             base,
             managed_config,
             managed_preferences,
-        } = load_config_layers_with_overrides(&self.codex_home, self.loader_overrides.clone())
-            .await?;
+        } = load_config_layers_with_overrides(
+            &self.codex_home,
+            self.loader_overrides.clone(),
+            None,
+        )
+        .await?;
 
         let user = LayerState::new(
             ConfigLayerName::User,

@@ -134,6 +134,7 @@ use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::CodexErrorInfo;
+use codex_protocol::protocol::ErrorEvent;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::user_input::UserInput;
 use codex_utils_readiness::Readiness;
@@ -2038,14 +2039,12 @@ pub(crate) async fn run_task(
                 // as long as compaction works well in getting us way below the token limit, we shouldn't worry about being in an infinite loop.
                 if token_limit_reached {
                     if auto_compact_recently_attempted {
-                        let limit_str = limit.to_string();
-                        let current_tokens = total_usage_tokens
-                            .map(|tokens| tokens.to_string())
-                            .unwrap_or_else(|| "unknown".to_string());
+                        let current_tokens = total_usage_tokens.to_string();
                         let event = EventMsg::Error(ErrorEvent {
                             message: format!(
-                                "Conversation is still above the token limit after automatic summarization (limit {limit_str}, current {current_tokens}). Please start a new session or trim your input."
+                                "Conversation is still above the token limit after automatic summarization (limit {limit}, current {current_tokens}). Please start a new session or trim your input."
                             ),
+                            codex_error_info: Some(CodexErrorInfo::Other),
                         });
                         sess.send_event(&turn_context, event).await;
                         break;
