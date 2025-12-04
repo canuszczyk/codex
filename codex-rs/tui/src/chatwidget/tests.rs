@@ -50,11 +50,13 @@ use codex_protocol::parse_command::ParsedCommand;
 use codex_protocol::plan_tool::PlanItemArg;
 use codex_protocol::plan_tool::StepStatus;
 use codex_protocol::plan_tool::UpdatePlanArgs;
+use codex_protocol::protocol::CodexErrorInfo;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use crossterm::event::KeyModifiers;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
 use tempfile::tempdir;
@@ -153,7 +155,6 @@ fn entered_review_mode_uses_request_hint() {
         msg: EventMsg::EnteredReviewMode(ReviewRequest {
             prompt: "Review the latest changes".to_string(),
             user_facing_hint: "feature branch".to_string(),
-            append_to_original_thread: true,
         }),
     });
 
@@ -173,7 +174,6 @@ fn entered_review_mode_defaults_to_current_changes_banner() {
         msg: EventMsg::EnteredReviewMode(ReviewRequest {
             prompt: "Review the current changes".to_string(),
             user_facing_hint: "current changes".to_string(),
-            append_to_original_thread: true,
         }),
     });
 
@@ -241,7 +241,6 @@ fn review_restores_context_window_indicator() {
         msg: EventMsg::EnteredReviewMode(ReviewRequest {
             prompt: "Review the latest changes".to_string(),
             user_facing_hint: "feature branch".to_string(),
-            append_to_original_thread: true,
         }),
     });
 
@@ -357,6 +356,8 @@ fn make_chatwidget_manual() -> (
         rate_limit_poller: None,
         stream_controller: None,
         running_commands: HashMap::new(),
+        suppressed_exec_calls: HashSet::new(),
+        last_unified_wait: None,
         task_complete_pending: false,
         mcp_startup_status: None,
         interrupts: InterruptManager::new(),
@@ -718,6 +719,7 @@ fn begin_exec_with_source(
     let interaction_input = None;
     let event = ExecCommandBeginEvent {
         call_id: call_id.to_string(),
+        process_id: None,
         turn_id: "turn-1".to_string(),
         command,
         cwd,
@@ -756,11 +758,13 @@ fn end_exec(
         parsed_cmd,
         source,
         interaction_input,
+        process_id,
     } = begin_event;
     chat.handle_codex_event(Event {
         id: call_id.clone(),
         msg: EventMsg::ExecCommandEnd(ExecCommandEndEvent {
             call_id,
+            process_id,
             turn_id,
             command,
             cwd,
@@ -1561,6 +1565,29 @@ fn approvals_selection_popup_snapshot() {
     });
     #[cfg(not(target_os = "windows"))]
     assert_snapshot!("approvals_selection_popup", popup);
+}
+
+#[test]
+fn preset_matching_ignores_extra_writable_roots() {
+    let preset = builtin_approval_presets()
+        .into_iter()
+        .find(|p| p.id == "auto")
+        .expect("auto preset exists");
+    let current_sandbox = SandboxPolicy::WorkspaceWrite {
+        writable_roots: vec![PathBuf::from("C:\\extra")],
+        network_access: false,
+        exclude_tmpdir_env_var: false,
+        exclude_slash_tmp: false,
+    };
+
+    assert!(
+        ChatWidget::preset_matches_current(AskForApproval::OnRequest, &current_sandbox, &preset),
+        "WorkspaceWrite with extra roots should still match the Agent preset"
+    );
+    assert!(
+        !ChatWidget::preset_matches_current(AskForApproval::Never, &current_sandbox, &preset),
+        "approval mismatch should prevent matching the preset"
+    );
 }
 
 #[test]
@@ -2647,6 +2674,7 @@ fn stream_error_updates_status_indicator() {
         id: "sub-1".into(),
         msg: EventMsg::StreamError(StreamErrorEvent {
             message: msg.to_string(),
+            codex_error_info: Some(CodexErrorInfo::Other),
         }),
     });
 
@@ -2852,6 +2880,7 @@ fn chatwidget_exec_and_status_layout_vt100_snapshot() {
         id: "c1".into(),
         msg: EventMsg::ExecCommandBegin(ExecCommandBeginEvent {
             call_id: "c1".into(),
+            process_id: None,
             turn_id: "turn-1".into(),
             command: command.clone(),
             cwd: cwd.clone(),
@@ -2864,6 +2893,7 @@ fn chatwidget_exec_and_status_layout_vt100_snapshot() {
         id: "c1".into(),
         msg: EventMsg::ExecCommandEnd(ExecCommandEndEvent {
             call_id: "c1".into(),
+            process_id: None,
             turn_id: "turn-1".into(),
             command,
             cwd,
