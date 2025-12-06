@@ -6,7 +6,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common procps locales iproute2 \
     python3 python3-pip python3-venv \
     openssh-client git git-lfs \
-    pkg-config libssl-dev && \
+    pkg-config libssl-dev zstd && \
     git lfs install --system && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8 && \
