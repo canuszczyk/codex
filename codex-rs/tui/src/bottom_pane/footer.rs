@@ -1,6 +1,7 @@
 use crate::key_hint;
 use crate::key_hint::KeyBinding;
 use crate::render::line_utils::prefix_lines;
+use crate::status::format_tokens_compact;
 use crate::ui_consts::FOOTER_INDENT_COLS;
 use crate::version::CODEX_CLI_VERSION;
 use crossterm::event::KeyCode;
@@ -21,6 +22,7 @@ pub(crate) struct FooterProps {
     pub(crate) use_shift_enter_hint: bool,
     pub(crate) is_task_running: bool,
     pub(crate) context_window_percent: Option<i64>,
+    pub(crate) context_window_used_tokens: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -84,7 +86,10 @@ fn footer_lines(props: FooterProps) -> Vec<Line<'static>> {
             is_task_running: props.is_task_running,
         })],
         FooterMode::ShortcutSummary => {
-            let mut line = context_window_line(props.context_window_percent);
+            let mut line = context_window_line(
+                props.context_window_percent,
+                props.context_window_used_tokens,
+            );
             line.push_span(" · ".dim());
             line.extend(vec![
                 key_hint::plain(KeyCode::Char('?')).into(),
@@ -97,7 +102,10 @@ fn footer_lines(props: FooterProps) -> Vec<Line<'static>> {
             esc_backtrack_hint: props.esc_backtrack_hint,
         }),
         FooterMode::EscHint => vec![esc_hint_line(props.esc_backtrack_hint)],
-        FooterMode::ContextOnly => vec![context_window_line(props.context_window_percent)],
+        FooterMode::ContextOnly => vec![context_window_line(
+            props.context_window_percent,
+            props.context_window_used_tokens,
+        )],
     }
 }
 
@@ -224,14 +232,26 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn context_window_line(percent: Option<i64>) -> Line<'static> {
-    let percent = percent.unwrap_or(100).clamp(0, 100);
-    Line::from(vec![
+fn context_window_line(percent: Option<i64>, used_tokens: Option<i64>) -> Line<'static> {
+    let mut spans = vec![
         PRODUCT_NAME.cyan(),
         format!(" ({CODEX_CLI_VERSION})").dim(),
         " ".into(),
-        format!("{percent}% context left").dim(),
-    ])
+    ];
+
+    if let Some(percent) = percent {
+        spans.push(format!("{}% context left", percent.clamp(0, 100)).dim());
+        return Line::from(spans);
+    }
+
+    if let Some(tokens) = used_tokens {
+        let used_fmt = format_tokens_compact(tokens);
+        spans.push(format!("{used_fmt} used").dim());
+        return Line::from(spans);
+    }
+
+    spans.push("100% context left".dim());
+    Line::from(spans)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -408,6 +428,7 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: false,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -419,6 +440,7 @@ mod tests {
                 use_shift_enter_hint: true,
                 is_task_running: false,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -430,6 +452,7 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: false,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -441,6 +464,7 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: true,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -452,6 +476,7 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: false,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -463,6 +488,7 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: false,
                 context_window_percent: None,
+                context_window_used_tokens: None,
             },
         );
 
@@ -474,6 +500,19 @@ mod tests {
                 use_shift_enter_hint: false,
                 is_task_running: true,
                 context_window_percent: Some(72),
+                context_window_used_tokens: None,
+            },
+        );
+
+        snapshot_footer(
+            "footer_context_tokens_used",
+            FooterProps {
+                mode: FooterMode::ShortcutSummary,
+                esc_backtrack_hint: false,
+                use_shift_enter_hint: false,
+                is_task_running: false,
+                context_window_percent: None,
+                context_window_used_tokens: Some(123_456),
             },
         );
     }
