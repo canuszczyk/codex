@@ -34,6 +34,9 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
     printf '%s' "$GITHUB_TOKEN" | gh auth login --with-token >/dev/null 2>&1 || true
   fi
 fi
+if command -v gh >/dev/null 2>&1; then
+  gh repo set-default canuszczyk/codex >/dev/null 2>&1 || true
+fi
 
 APP_BOOTSTRAP="${APP_BOOTSTRAP:-}"     # e.g., "dotnet restore && npm ci"
 
