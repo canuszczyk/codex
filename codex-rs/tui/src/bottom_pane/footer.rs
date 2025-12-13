@@ -5,6 +5,9 @@ use crate::key_hint::KeyBinding;
 use crate::render::line_utils::prefix_lines;
 use crate::status::format_tokens_compact;
 use crate::ui_consts::FOOTER_INDENT_COLS;
+use crate::version::CODEX_CLI_VERSION;
+
+const PRODUCT_NAME: &str = "codexAW";
 use crossterm::event::KeyCode;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -242,17 +245,25 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
 }
 
 fn context_window_line(percent: Option<i64>, used_tokens: Option<i64>) -> Line<'static> {
+    let mut spans = vec![
+        PRODUCT_NAME.cyan(),
+        format!(" ({CODEX_CLI_VERSION})").dim(),
+        " ".into(),
+    ];
+
     if let Some(percent) = percent {
-        let percent = percent.clamp(0, 100);
-        return Line::from(vec![Span::from(format!("{percent}% context left")).dim()]);
+        spans.push(format!("{}% context left", percent.clamp(0, 100)).dim());
+        return Line::from(spans);
     }
 
     if let Some(tokens) = used_tokens {
         let used_fmt = format_tokens_compact(tokens);
-        return Line::from(vec![Span::from(format!("{used_fmt} used")).dim()]);
+        spans.push(format!("{used_fmt} used").dim());
+        return Line::from(spans);
     }
 
-    Line::from(vec![Span::from("100% context left").dim()])
+    spans.push("100% context left".dim());
+    Line::from(spans)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
