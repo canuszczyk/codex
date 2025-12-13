@@ -1093,19 +1093,26 @@ impl Session {
     }
 
     pub async fn notify_approval(&self, sub_id: &str, decision: ReviewDecision) {
-        let entry = {
+        let (entry, turn_context) = {
             let mut active = self.active_turn.lock().await;
             match active.as_mut() {
                 Some(at) => {
+                    let ctx = at
+                        .tasks
+                        .get(sub_id)
+                        .map(|task| Arc::clone(&task.turn_context));
                     let mut ts = at.turn_state.lock().await;
-                    ts.remove_pending_approval(sub_id)
+                    (ts.remove_pending_approval(sub_id), ctx)
                 }
-                None => None,
+                None => (None, None),
             }
         };
         match entry {
             Some(tx_approve) => {
                 tx_approve.send(decision).ok();
+                if let Some(ctx) = turn_context {
+                    self.notify_turn_start_from_history(ctx).await;
+                }
             }
             None => {
                 warn!("No pending approval found for sub_id: {sub_id}");
