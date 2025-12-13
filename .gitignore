@@ -30,6 +30,9 @@ result
 # cli tools
 CLAUDE.md
 .claude/
+.codex/
+.agent-watch/
+.gemini/
 AGENTS.override.md
 
 # caches
