@@ -10,10 +10,14 @@ pub(crate) struct UserNotifier {
 
 impl UserNotifier {
     pub(crate) fn notify(&self, notification: &UserNotification) {
+        tracing::debug!("UserNotifier::notify called, command={:?}", self.notify_command);
         if let Some(notify_command) = &self.notify_command
             && !notify_command.is_empty()
         {
+            tracing::debug!("Invoking notification command");
             self.invoke_notify(notify_command, notification)
+        } else {
+            tracing::debug!("No notify command configured, skipping notification");
         }
     }
 
@@ -36,6 +40,7 @@ impl UserNotifier {
     }
 
     pub(crate) fn new(notify: Option<Vec<String>>) -> Self {
+        tracing::debug!("UserNotifier::new called with notify={:?}", notify);
         Self {
             notify_command: notify,
         }
