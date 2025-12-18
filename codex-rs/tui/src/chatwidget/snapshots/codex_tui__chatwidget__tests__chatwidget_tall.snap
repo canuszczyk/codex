@@ -1,7 +1,9 @@
 ---
 source: tui/src/chatwidget/tests.rs
+assertion_line: 3540
 expression: term.backend().vt100().screen().contents()
 ---
+
 • Working (0s • esc to interrupt)
   ↳ Hello, world! 0
   ↳ Hello, world! 1
@@ -24,4 +26,4 @@ expression: term.backend().vt100().screen().contents()
 
 › Ask Codex to do anything
 
-  100% context left · ? for shortcuts
+  codexAW (0.75.0) 100% context left · ? for shortcuts
