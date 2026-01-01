@@ -665,7 +665,12 @@ Specify a program that will be executed to get notified about events generated b
 }
 ```
 
-The `"type"` property will always be set. Currently, `"agent-turn-complete"` is the only notification type that is supported.
+The `"type"` property will always be set. The following notification types are supported:
+
+- `"agent-turn-start"` - Sent when the agent begins processing a new turn.
+- `"agent-turn-user-prompt"` - Sent when the agent is waiting for user approval (for command execution or file changes).
+- `"agent-turn-complete"` - Sent when the agent finishes processing a turn successfully.
+- `"agent-turn-stop"` - Sent when the agent turn is interrupted by the user.
 
 `"thread-id"` contains a string that identifies the Codex session that produced the notification; you can use it to correlate multiple turns that belong to the same task.
 

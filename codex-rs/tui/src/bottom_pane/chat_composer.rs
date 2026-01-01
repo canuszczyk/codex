@@ -1957,7 +1957,8 @@ mod tests {
             false,
         );
 
-        let area = Rect::new(0, 0, 40, 6);
+        // Width 60 to accommodate footer branding + shortcuts hint
+        let area = Rect::new(0, 0, 60, 6);
         let mut buf = Buffer::empty(area);
         composer.render(area, &mut buf);
 

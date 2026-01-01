@@ -146,6 +146,7 @@ use crate::unified_exec::UnifiedExecSessionManager;
 use crate::user_instructions::DeveloperInstructions;
 use crate::user_instructions::UserInstructions;
 use crate::user_notification::UserNotification;
+use crate::user_notification::UserPromptNotification;
 use crate::util::backoff;
 use codex_async_utils::OrCancelExt;
 use codex_execpolicy::Policy as ExecPolicy;
@@ -738,6 +739,10 @@ impl Session {
         self.tx_event.clone()
     }
 
+    pub(crate) fn conversation_id(&self) -> ConversationId {
+        self.conversation_id
+    }
+
     /// Ensure all rollout writes are durably flushed.
     pub(crate) async fn flush_rollout(&self) {
         let recorder = {
@@ -1085,6 +1090,14 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ExecApproval {
+                command: command.clone(),
+                reason: reason.clone(),
+            },
+        );
+
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -1124,6 +1137,15 @@ impl Session {
         if prev_entry.is_some() {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
+
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ApplyPatchApproval {
+                files: prompt_files,
+                reason: reason.clone(),
+            },
+        );
 
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
@@ -1580,6 +1602,33 @@ impl Session {
 
     async fn cancel_mcp_startup(&self) {
         self.services.mcp_startup_cancellation_token.cancel();
+    }
+
+    fn notify_turn_start_with_messages(
+        &self,
+        turn_context: &TurnContext,
+        input_messages: Vec<String>,
+    ) {
+        self.notifier().notify(&UserNotification::AgentTurnStart {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
+    fn notify_turn_user_prompt(
+        &self,
+        turn_context: &TurnContext,
+        prompt: UserPromptNotification,
+    ) {
+        self.notifier()
+            .notify(&UserNotification::AgentTurnUserPrompt {
+                thread_id: self.conversation_id.to_string(),
+                turn_id: turn_context.sub_id.clone(),
+                cwd: turn_context.cwd.display().to_string(),
+                prompt,
+            });
     }
 }
 
@@ -2268,6 +2317,7 @@ pub(crate) async fn run_task(
     // many turns, from the perspective of the user, it is a single turn.
     let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new()));
 
+    let mut turn_start_notified = false;
     loop {
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
@@ -2294,6 +2344,15 @@ pub(crate) async fn run_task(
             })
             .map(|user_message| user_message.message())
             .collect::<Vec<String>>();
+
+        if !turn_start_notified {
+            sess.notify_turn_start_with_messages(
+                turn_context.as_ref(),
+                turn_input_messages.clone(),
+            );
+            turn_start_notified = true;
+        }
+
         match run_turn(
             Arc::clone(&sess),
             Arc::clone(&turn_context),

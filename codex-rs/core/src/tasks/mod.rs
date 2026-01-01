@@ -19,6 +19,8 @@ use tracing::warn;
 use crate::AuthManager;
 use crate::codex::Session;
 use crate::codex::TurnContext;
+use crate::compact::collect_user_messages;
+use crate::user_notification::UserNotification;
 use crate::models_manager::manager::ModelsManager;
 use crate::protocol::EventMsg;
 use crate::protocol::TaskCompleteEvent;
@@ -235,8 +237,26 @@ impl Session {
             .abort(session_ctx, Arc::clone(&task.turn_context))
             .await;
 
+        if matches!(reason, TurnAbortReason::Interrupted) {
+            self.notify_turn_stopped(Arc::clone(&task.turn_context))
+                .await;
+        }
+
         let event = EventMsg::TurnAborted(TurnAbortedEvent { reason });
         self.send_event(task.turn_context.as_ref(), event).await;
+    }
+
+    async fn notify_turn_stopped(self: &Arc<Self>, turn_context: Arc<TurnContext>) {
+        let mut history = self.clone_history().await;
+        let turn_input = history.get_history_for_prompt();
+        let input_messages = collect_user_messages(&turn_input);
+
+        self.notifier().notify(&UserNotification::AgentTurnStop {
+            thread_id: self.conversation_id().to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
     }
 }
 
