@@ -34,7 +34,7 @@ RUN groupadd --gid $USER_GID $USERNAME && \
 ENV NPM_CONFIG_CACHE=/home/${USERNAME}/.npm
 ENV NPM_CONFIG_PREFIX=/home/${USERNAME}/.npm-global
 ENV DOTNET_ROOT=/usr/share/dotnet
-ENV PATH="/home/${USERNAME}/.npm-global/bin:${DOTNET_ROOT}:${PATH}:/home/${USERNAME}/.dotnet/tools"
+ENV PATH="/home/${USERNAME}/.npm-global/bin:${DOTNET_ROOT}:${PATH}:/home/${USERNAME}/.dotnet/tools:/home/${USERNAME}/.claude/local/bin"
 ENV LANG=C.UTF-8 LANGUAGE=en_US:en LC_ALL=C.UTF-8
 ENV DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
@@ -47,10 +47,17 @@ RUN curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
 
 ENV PATH="/home/vscode/.cargo/bin:${PATH}"
 
-# Install CLI tools as user (no sudo required for updates)
+# Set up user-local npm prefix for AI CLIs (allows auto-updates)
 RUN mkdir -p ~/.npm-global && \
-    npm install -g @anthropic-ai/claude-code @google/gemini-cli @openai/codex \
-        https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz
+    npm config set prefix "$HOME/.npm-global"
+
+# NOTE:
+# AI CLIs (claude, gemini, codex, codexaw) are NOT installed at image build time.
+# They are instead installed in .devcontainer/post-create-command.sh using the
+# persisted npm cache volume. This makes "Rebuild Container" faster.
+
+# Ensure common state directories exist (owned by vscode)
+RUN mkdir -p ~/.codex/sessions ~/.claude ~/.gemini
 
 WORKDIR /app
 EXPOSE 3000 5432

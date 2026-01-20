@@ -49,6 +49,9 @@ ensure_claude_commands() {
   local prompt_file="$commands_dir/port-release.md"
   local wiki_url="https://raw.githubusercontent.com/wiki/canuszczyk/codex/Port-Release-Prompt.md"
 
+  # Fix ownership of .claude volume (may be root-owned when first created)
+  [ -d /home/vscode/.claude ] && sudo chown -R "$(id -u):$(id -g)" /home/vscode/.claude || true
+
   # Create commands directory if it doesn't exist
   mkdir -p "$commands_dir"
 
@@ -63,6 +66,70 @@ ensure_claude_commands() {
   else
     log "port-release prompt already present"
   fi
+}
+
+install_ai_clis() {
+  # Skip with SKIP_AI_CLIS=1 for faster rebuilds
+  if [[ "${SKIP_AI_CLIS:-0}" == "1" ]]; then
+    log "Skipping AI CLI installation (SKIP_AI_CLIS=1)"
+    return 0
+  fi
+
+  local npm_prefix="${NPM_CONFIG_PREFIX:-$HOME/.npm-global}"
+  local bin_dir="$npm_prefix/bin"
+  mkdir -p "$npm_prefix" "$bin_dir"
+  npm config set prefix "$npm_prefix" >/dev/null 2>&1 || true
+
+  # Ensure npm global bin and ~/.local/bin are in PATH for this session
+  if [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+    export PATH="$bin_dir:$PATH"
+  fi
+  if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
+
+  # Persist PATH additions to .bashrc for interactive shells
+  local bashrc="$HOME/.bashrc"
+  if [[ -f "$bashrc" ]]; then
+    if ! grep -q '\.local/bin' "$bashrc" 2>/dev/null; then
+      log "Adding ~/.local/bin to .bashrc"
+      echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$bashrc"
+    fi
+    if ! grep -q '\.npm-global/bin' "$bashrc" 2>/dev/null; then
+      log "Adding ~/.npm-global/bin to .bashrc"
+      echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> "$bashrc"
+    fi
+  fi
+
+  log "Ensuring AI CLIs (claude, gemini, codex, codexaw)… Set SKIP_AI_CLIS=1 to skip"
+
+  # Claude: use official installer (installs to ~/.claude/local/bin)
+  if ! command -v claude >/dev/null 2>&1; then
+    log "Installing Claude CLI…"
+    if timeout 120 bash -c 'curl -fsSL https://claude.ai/install.sh | bash'; then
+      log "Claude CLI installed."
+    else
+      log "Warning: Failed/timeout installing Claude CLI (non-fatal)."
+    fi
+  fi
+
+  # Gemini CLI via npm (timeout 120s)
+  log "Installing Gemini CLI…"
+  timeout 120 npm install -g @google/gemini-cli || log "Warning: Failed/timeout installing Gemini CLI (non-fatal)."
+
+  # Codexaw (forked) - install first, then rename binary (timeout 120s)
+  log "Installing Codexaw CLI…"
+  if timeout 120 npm install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz; then
+    if [ -x "$bin_dir/codex" ]; then
+      mv "$bin_dir/codex" "$bin_dir/codexaw" >/dev/null 2>&1 || true
+    fi
+  else
+    log "Warning: Failed/timeout installing codexaw (non-fatal)."
+  fi
+
+  # Official Codex (upstream) (timeout 120s)
+  log "Installing Codex CLI…"
+  timeout 120 npm install -g @openai/codex || log "Warning: Failed/timeout installing upstream codex (non-fatal)."
 }
 
 ensure_pnpm() {
@@ -93,7 +160,7 @@ bootstrap_app() {
   fi
 
   # Ensure dev caches are owned by the container user (for named volumes)
-  for p in /home/vscode/.nuget /home/vscode/.npm; do
+  for p in /home/vscode/.nuget /home/vscode/.npm /home/vscode/.codex; do
     [ -d "$p" ] && sudo chown -R "$(id -u):$(id -g)" "$p" || true
   done
 
@@ -188,6 +255,7 @@ main() {
     --quick)
       ensure_pnpm
       ensure_claude_commands
+      install_ai_clis
       bootstrap_app
       log "Done."
       exit 0
@@ -196,6 +264,7 @@ main() {
 
   ensure_pnpm
   ensure_claude_commands
+  install_ai_clis
   bootstrap_app
   log "Done."
 }
