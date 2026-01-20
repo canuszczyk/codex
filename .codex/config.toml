@@ -1,0 +1,1 @@
+notify = ["/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64", "--mode", "codex", "--source-app", "CodexFork"]

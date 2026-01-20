@@ -2,6 +2,9 @@
   "name": "Code with .NET, Node.js, Claude, Rust, Codex CLI",
   "build": { "dockerfile": "Dockerfile" },
 
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/codex,type=bind,consistency=cached",
+  "workspaceFolder": "/home/vscode/codex",
+
   "forwardPorts": [4000],
   "portsAttributes": {
     "4000": { "label": "Web App" }
@@ -27,7 +30,11 @@
     "--mount", "type=bind,source=${localEnv:HOME}/.claude,target=/home/vscode/.claude",
     "--add-host=host.docker.internal:host-gateway",
     "--mount", "type=volume,source=${localWorkspaceFolderBasename}-tmp,target=/tmp",
-    "--shm-size", "2g"
+    "--shm-size", "2g",
+
+    "--cpus=4",
+    "--memory=16g",
+    "--memory-swap=24g"
   ],
 
   "postCreateCommand": "bash -lc \"mkdir -p ${containerWorkspaceFolder}/.local && npm install -g pnpm@10.8.1 --prefix ${containerWorkspaceFolder}/.local || true; bash ${containerWorkspaceFolder}/.devcontainer/post-create-command.sh\"",

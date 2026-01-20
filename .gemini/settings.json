@@ -1,0 +1,127 @@
+{
+  "hooks": {
+    "AfterAgent": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type AfterAgent --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "AfterModel": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type AfterModel --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type AfterTool --source-app \"CodexFork\" --summarize --persist-payload",
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type BeforeAgent --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "BeforeModel": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type BeforeModel --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type BeforeTool --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ],
+        "matcher": ".*"
+      }
+    ],
+    "BeforeToolSelection": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type BeforeToolSelection --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type Notification --source-app \"CodexFork\" --summarize --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PreCompress": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type PreCompress --source-app \"CodexFork\" --summarize",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type SessionEnd --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "\"/home/vscode/codex/.agent-watch/agent-watch-bridge-linux-amd64\" --mode gemini --event-type SessionStart --source-app \"CodexFork\" --persist-payload",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "telemetry": {
+    "enabled": true,
+    "logPrompts": true,
+    "otlpEndpoint": "https://agent-watch.com",
+    "otlpProtocol": "http",
+    "target": "local",
+    "useCollector": true
+  },
+  "tools": {
+    "enableHooks": true
+  }
+}

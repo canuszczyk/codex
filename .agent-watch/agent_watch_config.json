@@ -1,0 +1,11 @@
+{
+  "source_app": "CodexFork",
+  "server_url": "https://agent-watch.com/events",
+  "api_key": "sk_6f61836b-494a-4a98-8457-7affa013f5cb_53beb6da02faccab9145ca58a8a0e8a53f1a02edec54c68b",
+  "project_name": "CodexFork",
+  "log_dir": "/home/vscode/codex/.agent-watch/logs",
+  "queue_path": "/home/vscode/codex/.agent-watch/agent-watch-cache/events.jsonl",
+  "queue_flush_budget_ms": 20000,
+  "otlp_endpoint": "https://agent-watch.com",
+  "otlp_enabled": true
+}
