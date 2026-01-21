@@ -1,8 +1,8 @@
 {
-  "source_app": "CodexFork",
+  "source_app": "CodexCLI",
   "server_url": "https://agent-watch.com/events",
-  "api_key": "sk_6f61836b-494a-4a98-8457-7affa013f5cb_53beb6da02faccab9145ca58a8a0e8a53f1a02edec54c68b",
-  "project_name": "CodexFork",
+  "api_key": "sk_4b35a444-cf53-4640-92ce-df70ba4fd5dd_0903c26426f9e5aa56e060b58749470f10a70464dbeaf51a",
+  "project_name": "CodexCLI",
   "log_dir": "/home/vscode/codex/.agent-watch/logs",
   "queue_path": "/home/vscode/codex/.agent-watch/agent-watch-cache/events.jsonl",
   "queue_flush_budget_ms": 20000,
