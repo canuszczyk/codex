@@ -19,11 +19,13 @@ use tracing::warn;
 use crate::AuthManager;
 use crate::codex::Session;
 use crate::codex::TurnContext;
+use crate::compact::collect_user_messages;
 use crate::models_manager::manager::ModelsManager;
 use crate::protocol::EventMsg;
 use crate::protocol::TurnAbortReason;
 use crate::protocol::TurnAbortedEvent;
 use crate::protocol::TurnCompleteEvent;
+use crate::user_notification::UserNotification;
 use crate::session_prefix::TURN_ABORTED_OPEN_TAG;
 use crate::state::ActiveTurn;
 use crate::state::RunningTask;
@@ -222,6 +224,19 @@ impl Session {
             .await;
     }
 
+    async fn notify_turn_stopped(self: &Arc<Self>, turn_context: Arc<TurnContext>) {
+        let history = self.clone_history().await;
+        let turn_input = history.for_prompt();
+        let input_messages = collect_user_messages(&turn_input);
+
+        self.notifier().notify(&UserNotification::AgentTurnStop {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
     async fn handle_task_abort(self: &Arc<Self>, task: RunningTask, reason: TurnAbortReason) {
         let sub_id = task.turn_context.sub_id.clone();
         if task.cancellation_token.is_cancelled() {
@@ -246,6 +261,11 @@ impl Session {
         session_task
             .abort(session_ctx, Arc::clone(&task.turn_context))
             .await;
+
+        if matches!(reason, TurnAbortReason::Interrupted) {
+            self.notify_turn_stopped(Arc::clone(&task.turn_context))
+                .await;
+        }
 
         if reason == TurnAbortReason::Interrupted {
             let marker = ResponseItem::Message {

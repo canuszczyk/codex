@@ -161,6 +161,7 @@ use crate::tools::spec::ToolsConfigParams;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::unified_exec::UnifiedExecProcessManager;
 use crate::user_notification::UserNotification;
+use crate::user_notification::UserPromptNotification;
 use crate::util::backoff;
 use codex_async_utils::OrCancelExt;
 use codex_otel::OtelManager;
@@ -1287,6 +1288,14 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ExecApproval {
+                command: command.clone(),
+                reason: reason.clone(),
+            },
+        );
+
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -1326,6 +1335,15 @@ impl Session {
         if prev_entry.is_some() {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
+
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ApplyPatchApproval {
+                files: prompt_files,
+                reason: reason.clone(),
+            },
+        );
 
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
@@ -1826,6 +1844,15 @@ impl Session {
         }
     }
 
+    /// Get the turn context for the currently active turn, if any.
+    async fn get_active_turn_context(&self) -> Option<Arc<TurnContext>> {
+        let active = self.active_turn.lock().await;
+        active
+            .as_ref()
+            .and_then(|at| at.tasks.values().next())
+            .map(|task| Arc::clone(&task.turn_context))
+    }
+
     pub async fn list_resources(
         &self,
         server: &str,
@@ -1900,6 +1927,36 @@ impl Session {
 
     pub(crate) fn notifier(&self) -> &UserNotifier {
         &self.services.notifier
+    }
+
+    fn notify_turn_start_with_messages(
+        &self,
+        turn_context: &TurnContext,
+        input_messages: Vec<String>,
+    ) {
+        self.notifier().notify(&UserNotification::AgentTurnStart {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
+    async fn notify_turn_start_from_history(&self, turn_context: Arc<TurnContext>) {
+        let history = self.clone_history().await;
+        let turn_input = history.for_prompt();
+        let input_messages = collect_user_messages(&turn_input);
+        self.notify_turn_start_with_messages(turn_context.as_ref(), input_messages);
+    }
+
+    fn notify_turn_user_prompt(&self, turn_context: &TurnContext, prompt: UserPromptNotification) {
+        self.notifier()
+            .notify(&UserNotification::AgentTurnUserPrompt {
+                thread_id: self.conversation_id.to_string(),
+                turn_id: turn_context.sub_id.clone(),
+                cwd: turn_context.cwd.display().to_string(),
+                prompt,
+            });
     }
 
     pub(crate) fn user_shell(&self) -> Arc<shell::Shell> {
@@ -2350,7 +2407,13 @@ mod handlers {
             ReviewDecision::Abort => {
                 sess.interrupt_task().await;
             }
-            other => sess.notify_approval(&id, other).await,
+            other => {
+                sess.notify_approval(&id, other).await;
+                // Notify turn start after approval is handled
+                if let Some(ctx) = sess.get_active_turn_context().await {
+                    sess.notify_turn_start_from_history(ctx).await;
+                }
+            }
         }
     }
 
@@ -2359,7 +2422,13 @@ mod handlers {
             ReviewDecision::Abort => {
                 sess.interrupt_task().await;
             }
-            other => sess.notify_approval(&id, other).await,
+            other => {
+                sess.notify_approval(&id, other).await;
+                // Notify turn start after approval is handled
+                if let Some(ctx) = sess.get_active_turn_context().await {
+                    sess.notify_turn_start_from_history(ctx).await;
+                }
+            }
         }
     }
 
@@ -2836,6 +2905,18 @@ pub(crate) async fn run_turn(
 
     let mut client_session = turn_context.client.new_session();
 
+    // Collect input messages for turn start notification
+    let turn_input_messages: Vec<String> = input
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+
+    // Track whether we've sent the turn start notification
+    let mut turn_start_notified = false;
+
     loop {
         // Note that pending_input would be something like a message the user
         // submitted through the UI while the model was running. Though the UI
@@ -2862,6 +2943,16 @@ pub(crate) async fn run_turn(
             })
             .map(|user_message| user_message.message())
             .collect::<Vec<String>>();
+
+        // Send turn start notification before first sampling request
+        if !turn_start_notified {
+            sess.notify_turn_start_with_messages(
+                turn_context.as_ref(),
+                turn_input_messages.clone(),
+            );
+            turn_start_notified = true;
+        }
+
         match run_sampling_request(
             Arc::clone(&sess),
             Arc::clone(&turn_context),
