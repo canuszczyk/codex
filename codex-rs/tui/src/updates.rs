@@ -146,6 +146,9 @@ fn extract_version_from_releases(releases: &[ReleaseInfo]) -> anyhow::Result<Str
     anyhow::bail!("No release found with a recognized tag prefix")
 }
 
+/// Extract version from a tag name like "rust-v1.5.0" or "codexaw-v1.5.0".
+/// Currently only used by tests but retained for potential future use.
+#[cfg(test)]
 fn extract_version_from_latest_tag(latest_tag_name: &str) -> anyhow::Result<String> {
     for prefix in &RELEASE_TAG_PREFIXES {
         if let Some(version) = latest_tag_name.strip_prefix(prefix) {
