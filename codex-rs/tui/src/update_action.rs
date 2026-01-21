@@ -52,7 +52,7 @@ pub(crate) fn get_update_action() -> Option<UpdateAction> {
     None
 }
 
-#[cfg(any(not(debug_assertions), test))]
+#[cfg(test)]
 fn detect_update_action(
     is_macos: bool,
     current_exe: &std::path::Path,
