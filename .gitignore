@@ -95,5 +95,8 @@ __pycache__/
 package-lock.json
 .local/
 .worktrees/
+.agent-watch/
+.codex/
+.gemini/
 
 .devcontainer/.env
