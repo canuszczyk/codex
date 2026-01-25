@@ -77,7 +77,7 @@ RUN mkdir -p ~/.npm-global && \
 # persisted npm cache volume. This makes "Rebuild Container" faster.
 
 # Ensure common state directories exist (owned by vscode)
-RUN mkdir -p ~/.codex/sessions ~/.claude ~/.gemini
+RUN mkdir -p ~/.codex/sessions ~/.claude ~/.config
 
 WORKDIR /app
 EXPOSE 3000 5432

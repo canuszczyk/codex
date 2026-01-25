@@ -19,7 +19,7 @@
     // "XDG_RUNTIME_DIR": "/run/user/1000"
   },
 
-  "initializeCommand": "bash -lc 'set -euo pipefail; mkdir -p .devcontainer \"$HOME/.claude\" \"$HOME/.codex\"; if [ ! -f .devcontainer/.env ]; then printf \"# GitHub CLI token (for gh API; git over SSH uses your SSH key)\\nGH_TOKEN=\\n\\n# AI keys (only if you actually use them in this container)\\nOPENAI_API_KEY=\\nANTHROPIC_API_KEY=\\n\" > .devcontainer/.env; fi; chmod 600 .devcontainer/.env; grep -qxF \".devcontainer/.env\" .gitignore || echo \".devcontainer/.env\" >> .gitignore; [ -f .devcontainer/post-create-command.sh ] && chmod +x .devcontainer/post-create-command.sh || true; SOCK=\"${SSH_AUTH_SOCK:-}\"; for H in \"$HOME\" \"/home/vscode\" \"/home/canuszczyk\"; do [ -d \"$H\" ] || continue; mkdir -p \"$H/.ssh\"; if [ -n \"$SOCK\" ] && [ -S \"$SOCK\" ]; then ln -snf \"$SOCK\" \"$H/.ssh/agent.sock\"; else rm -f \"$H/.ssh/agent.sock\"; fi; done'",
+  "initializeCommand": "bash -lc 'set -euo pipefail; mkdir -p .devcontainer \"$HOME/.claude\" \"$HOME/.codex\" \"$HOME/.config/gh\"; if [ ! -f .devcontainer/.env ]; then printf \"# GitHub CLI token (for gh API; git over SSH uses your SSH key)\\nGH_TOKEN=\\n\\n# AI keys (only if you actually use them in this container)\\nOPENAI_API_KEY=\\nANTHROPIC_API_KEY=\\n\" > .devcontainer/.env; fi; chmod 600 .devcontainer/.env; grep -qxF \".devcontainer/.env\" .gitignore || echo \".devcontainer/.env\" >> .gitignore; [ -f .devcontainer/post-create-command.sh ] && chmod +x .devcontainer/post-create-command.sh || true; SOCK=\"${SSH_AUTH_SOCK:-}\"; for H in \"$HOME\" \"/home/vscode\" \"/home/canuszczyk\"; do [ -d \"$H\" ] || continue; mkdir -p \"$H/.ssh\"; if [ -n \"$SOCK\" ] && [ -S \"$SOCK\" ]; then ln -snf \"$SOCK\" \"$H/.ssh/agent.sock\"; else rm -f \"$H/.ssh/agent.sock\"; fi; done'",
 
   "runArgs": [
     "--env-file", "${localWorkspaceFolder}/.devcontainer/.env",
@@ -28,6 +28,7 @@
     "--mount", "type=volume,source=agentwatch-hooks,target=/home/vscode/.agent-watch-hooks",
     "--mount", "type=bind,source=${localEnv:HOME}/.codex,target=/home/vscode/.codex",
     "--mount", "type=bind,source=${localEnv:HOME}/.claude,target=/home/vscode/.claude",
+    "--mount", "type=bind,source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh",
     "--add-host=host.docker.internal:host-gateway",
     "--mount", "type=volume,source=${localWorkspaceFolderBasename}-tmp,target=/tmp",
     "--shm-size", "2g",
