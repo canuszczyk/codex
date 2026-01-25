@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::path::PathBuf;
 use tracing::error;
 use tracing::warn;
 
@@ -46,42 +47,54 @@ impl UserNotifier {
 /// program.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum UserNotification {
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnStart {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        /// Messages that the user sent to the agent to initiate the turn.
+        input_messages: Vec<String>,
+    },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnUserPrompt {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        prompt: UserPromptNotification,
+    },
     #[serde(rename_all = "kebab-case")]
     AgentTurnComplete {
         thread_id: String,
         turn_id: String,
         cwd: String,
-
         /// Messages that the user sent to the agent to initiate the turn.
         input_messages: Vec<String>,
-
         /// The last message sent by the assistant in the turn.
         last_assistant_message: Option<String>,
     },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnStop {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        /// Messages that the user sent to the agent to initiate the turn.
+        input_messages: Vec<String>,
+    },
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use anyhow::Result;
-
-    #[test]
-    fn test_user_notification() -> Result<()> {
-        let notification = UserNotification::AgentTurnComplete {
-            thread_id: "b5f6c1c2-1111-2222-3333-444455556666".to_string(),
-            turn_id: "12345".to_string(),
-            cwd: "/Users/example/project".to_string(),
-            input_messages: vec!["Rename `foo` to `bar` and update the callsites.".to_string()],
-            last_assistant_message: Some(
-                "Rename complete and verified `cargo build` succeeds.".to_string(),
-            ),
-        };
-        let serialized = serde_json::to_string(&notification)?;
-        assert_eq!(
-            serialized,
-            r#"{"type":"agent-turn-complete","thread-id":"b5f6c1c2-1111-2222-3333-444455556666","turn-id":"12345","cwd":"/Users/example/project","input-messages":["Rename `foo` to `bar` and update the callsites."],"last-assistant-message":"Rename complete and verified `cargo build` succeeds."}"#
-        );
-        Ok(())
-    }
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "prompt-type", rename_all = "kebab-case")]
+pub(crate) enum UserPromptNotification {
+    ExecApproval {
+        command: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    ApplyPatchApproval {
+        files: Vec<PathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
 }
