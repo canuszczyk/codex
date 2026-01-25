@@ -28,7 +28,9 @@ use crate::stream_events_utils::handle_non_tool_response_item;
 use crate::stream_events_utils::handle_output_item_done;
 use crate::terminal;
 use crate::truncate::TruncationPolicy;
+use crate::user_notification::UserNotification;
 use crate::user_notification::UserNotifier;
+use crate::user_notification::UserPromptNotification;
 use crate::util::error_or_panic;
 use async_channel::Receiver;
 use async_channel::Sender;
@@ -161,7 +163,6 @@ use crate::tools::spec::ToolsConfig;
 use crate::tools::spec::ToolsConfigParams;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::unified_exec::UnifiedExecProcessManager;
-use crate::user_notification::UserNotification;
 use crate::util::backoff;
 use codex_async_utils::OrCancelExt;
 use codex_otel::OtelManager;
@@ -1338,6 +1339,14 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ExecApproval {
+                command: command.clone(),
+                reason: reason.clone(),
+            },
+        );
+
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -1377,6 +1386,15 @@ impl Session {
         if prev_entry.is_some() {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
+
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ApplyPatchApproval {
+                files: prompt_files,
+                reason: reason.clone(),
+            },
+        );
 
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
@@ -1952,6 +1970,29 @@ impl Session {
 
     pub(crate) fn notifier(&self) -> &UserNotifier {
         &self.services.notifier
+    }
+
+    fn notify_turn_start_with_messages(
+        &self,
+        turn_context: &TurnContext,
+        input_messages: Vec<String>,
+    ) {
+        self.notifier().notify(&UserNotification::AgentTurnStart {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
+    fn notify_turn_user_prompt(&self, turn_context: &TurnContext, prompt: UserPromptNotification) {
+        self.notifier()
+            .notify(&UserNotification::AgentTurnUserPrompt {
+                thread_id: self.conversation_id.to_string(),
+                turn_id: turn_context.sub_id.clone(),
+                cwd: turn_context.cwd.display().to_string(),
+                prompt,
+            });
     }
 
     pub(crate) fn user_shell(&self) -> Arc<shell::Shell> {
@@ -2858,6 +2899,17 @@ pub(crate) async fn run_turn(
         model_context_window: turn_context.client.get_model_context_window(),
     });
     sess.send_event(&turn_context, event).await;
+
+    // Collect input messages for the turn start notification
+    let turn_input_messages = input
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<String>>();
+
+    sess.notify_turn_start_with_messages(turn_context.as_ref(), turn_input_messages);
 
     let skills_outcome = Some(
         sess.services

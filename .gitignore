@@ -91,3 +91,9 @@ CHANGELOG.ignore.md
 __pycache__/
 *.pyc
 
+# codexAW local files
+package-lock.json
+.local/
+.worktrees/
+
+.devcontainer/.env
