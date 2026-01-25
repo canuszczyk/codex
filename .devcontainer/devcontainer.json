@@ -33,7 +33,7 @@
     "--mount", "type=volume,source=${localWorkspaceFolderBasename}-tmp,target=/tmp",
     "--shm-size", "2g",
 
-    "--cpus=4",
+    "--cpus=8",
     "--memory=16g",
     "--memory-swap=24g"
   ],
