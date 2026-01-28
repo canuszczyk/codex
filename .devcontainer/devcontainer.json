@@ -1,27 +1,84 @@
 {
-  "name": "Codex",
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "platform": "linux/arm64"
-  },
+  "name": "Code with .NET, Node.js, Claude, Rust, Codex CLI",
+  "build": { "dockerfile": "Dockerfile" },
 
-  /* Force VS Code to run the container as arm64 in
-     case your host is x86 (or vice-versa). */
-  "runArgs": ["--platform=linux/arm64"],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/vscode/codex,type=bind,consistency=cached",
+  "workspaceFolder": "/home/vscode/codex",
+
+  "forwardPorts": [4000],
+  "portsAttributes": {
+    "4000": { "label": "Web App" }
+  },
 
   "containerEnv": {
-    "RUST_BACKTRACE": "1",
-    "CARGO_TARGET_DIR": "${containerWorkspaceFolder}/codex-rs/target-arm64"
+    "LANG": "C.UTF-8",
+    "LANGUAGE": "en_US:en",
+    "LC_ALL": "C.UTF-8",
+    "DOTNET_CLI_HOME": "/home/vscode",
+    "DOTNET_EnableDiagnostics": "0"
+    // "XDG_RUNTIME_DIR": "/run/user/1000"
   },
 
-  "remoteUser": "ubuntu",
+  "initializeCommand": "bash -lc 'set -euo pipefail; mkdir -p .devcontainer \"$HOME/.claude\" \"$HOME/.codex\" \"$HOME/.config/gh\"; if [ ! -f .devcontainer/.env ]; then printf \"# GitHub CLI token (for gh API; git over SSH uses your SSH key)\\nGH_TOKEN=\\n\\n# AI keys (only if you actually use them in this container)\\nOPENAI_API_KEY=\\nANTHROPIC_API_KEY=\\n\" > .devcontainer/.env; fi; chmod 600 .devcontainer/.env; grep -qxF \".devcontainer/.env\" .gitignore || echo \".devcontainer/.env\" >> .gitignore; [ -f .devcontainer/post-create-command.sh ] && chmod +x .devcontainer/post-create-command.sh || true; SOCK=\"${SSH_AUTH_SOCK:-}\"; for H in \"$HOME\" \"/home/vscode\" \"/home/canuszczyk\"; do [ -d \"$H\" ] || continue; mkdir -p \"$H/.ssh\"; if [ -n \"$SOCK\" ] && [ -S \"$SOCK\" ]; then ln -snf \"$SOCK\" \"$H/.ssh/agent.sock\"; else rm -f \"$H/.ssh/agent.sock\"; fi; done'",
+
+  "runArgs": [
+    "--env-file", "${localWorkspaceFolder}/.devcontainer/.env",
+    "--mount", "type=volume,source=npm-cache,target=/home/vscode/.npm",
+    "--mount", "type=volume,source=nuget-packages,target=/home/vscode/.nuget/packages",
+    "--mount", "type=volume,source=agentwatch-hooks,target=/home/vscode/.agent-watch-hooks",
+    "--mount", "type=bind,source=${localEnv:HOME}/.codex,target=/home/vscode/.codex",
+    "--mount", "type=bind,source=${localEnv:HOME}/.claude,target=/home/vscode/.claude",
+    "--mount", "type=bind,source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh",
+    "--add-host=host.docker.internal:host-gateway",
+    "--mount", "type=volume,source=${localWorkspaceFolderBasename}-tmp,target=/tmp",
+    "--shm-size", "2g",
+
+    "--cpus=8",
+    "--memory=16g",
+    "--memory-swap=24g"
+  ],
+
+  "postCreateCommand": "bash -lc \"mkdir -p ${containerWorkspaceFolder}/.local && npm install -g pnpm@10.8.1 --prefix ${containerWorkspaceFolder}/.local || true; bash ${containerWorkspaceFolder}/.devcontainer/post-create-command.sh\"",
+  "postStartCommand": "bash .devcontainer/post-create-command.sh --quick",
+
   "customizations": {
     "vscode": {
       "settings": {
-        "terminal.integrated.defaultProfile.linux": "bash"
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": { "path": "/bin/bash" }
+        },
+        "remote.extensionKind": {
+          "github.copilot": "ui",
+          "github.copilot-chat": "ui"
+        },
+        "remote.downloadExtensionsLocally": true,
+        "npm.packageManager": "npm",
+        "files.watcherExclude": {
+          "**/node_modules/**": true,
+          "**/dist/**": true,
+          "**/build/**": true
+        }
       },
-      "extensions": ["rust-lang.rust-analyzer", "tamasfe.even-better-toml"]
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "ms-azuretools.vscode-docker",
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "astro-build.astro-vscode",
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ]
     }
-  }
+  },
+
+  // "mounts": [
+  //   "type=bind,source=${env:HOME}/.ssh/agent.sock,target=/ssh-agent"
+  // ],
+
+  // "remoteEnv": { "SSH_AUTH_SOCK": "/ssh-agent" },
+
+  "remoteUser": "vscode",
+  "features": {}
 }
