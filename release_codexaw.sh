@@ -51,7 +51,10 @@ fi
 
 if [[ "$reuse_tag" != true ]]; then
   git tag "${TAG}"
-  git push origin "${TAG}"
+  # Use gh to push tag (uses gh's authentication instead of git credentials)
+  gh api --method POST "repos/{owner}/{repo}/git/refs" \
+    -f ref="refs/tags/${TAG}" \
+    -f sha="$(git rev-parse HEAD)"
 fi
 
 if [[ "$reuse_tag" == true && "$release_exists" == true ]]; then
