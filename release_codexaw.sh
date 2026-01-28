@@ -51,10 +51,13 @@ fi
 
 if [[ "$reuse_tag" != true ]]; then
   git tag "${TAG}"
-  # Use gh to push tag (uses gh's authentication instead of git credentials)
-  gh api --method POST "repos/{owner}/{repo}/git/refs" \
-    -f ref="refs/tags/${TAG}" \
-    -f sha="$(git rev-parse HEAD)"
+  # Push branch and tag using gh (uses gh's authentication)
+  CURRENT_BRANCH=$(git branch --show-current)
+  echo "Pushing branch ${CURRENT_BRANCH} to origin..."
+  gh repo sync --source . --branch "${CURRENT_BRANCH}" 2>/dev/null || \
+    git -c credential.helper='!gh auth git-credential' push origin "${CURRENT_BRANCH}"
+  echo "Pushing tag ${TAG} to origin..."
+  git -c credential.helper='!gh auth git-credential' push origin "${TAG}"
 fi
 
 if [[ "$reuse_tag" == true && "$release_exists" == true ]]; then
