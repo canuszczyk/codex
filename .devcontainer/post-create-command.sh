@@ -35,7 +35,7 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
   fi
 fi
 if command -v gh >/dev/null 2>&1; then
-  gh repo set-default canuszczyk/codex >/dev/null 2>&1 || true
+  gh repo set-default digitalsoftwaresolutionsrepos/codex >/dev/null 2>&1 || true
 fi
 
 APP_BOOTSTRAP="${APP_BOOTSTRAP:-}"     # e.g., "dotnet restore && npm ci"
@@ -47,7 +47,7 @@ log() {
 ensure_claude_commands() {
   local commands_dir="/home/vscode/.claude/commands"
   local prompt_file="$commands_dir/port-release.md"
-  local wiki_url="https://raw.githubusercontent.com/wiki/canuszczyk/codex/Port-Release-Prompt.md"
+  local wiki_url="https://raw.githubusercontent.com/wiki/digitalsoftwaresolutionsrepos/codex/Port-Release-Prompt.md"
 
   # Fix ownership of .claude volume (may be root-owned when first created)
   [ -d /home/vscode/.claude ] && sudo chown -R "$(id -u):$(id -g)" /home/vscode/.claude || true
@@ -115,7 +115,7 @@ install_ai_clis() {
 
   # Codexaw (forked) - install first, then rename binary (timeout 120s)
   log "Installing Codexaw CLI…"
-  if timeout 120 npm install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz; then
+  if timeout 120 npm install -g https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz; then
     if [ -x "$bin_dir/codex" ]; then
       mv "$bin_dir/codex" "$bin_dir/codexaw" >/dev/null 2>&1 || true
     fi
