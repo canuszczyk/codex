@@ -58,7 +58,9 @@ const VERSION_FILENAME: &str = "version.json";
 // We use the latest version from the cask if installation is via homebrew - homebrew does not immediately pick up the latest release and can lag behind.
 const HOMEBREW_CASK_URL: &str =
     "https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/Casks/c/codex.rb";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+const LATEST_RELEASES_URL: &str =
+    "https://api.github.com/repos/canuszczyk/codex/releases?per_page=20";
+const RELEASE_TAG_PREFIXES: [&str; 2] = ["codexaw-v", "rust-v"];
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
@@ -87,16 +89,22 @@ async fn check_for_update(version_file: &Path) -> anyhow::Result<()> {
             extract_version_from_cask(&cask_contents)?
         }
         _ => {
-            let ReleaseInfo {
-                tag_name: latest_tag_name,
-            } = create_client()
-                .get(LATEST_RELEASE_URL)
+            let releases: Vec<ReleaseInfo> = create_client()
+                .get(LATEST_RELEASES_URL)
                 .send()
                 .await?
                 .error_for_status()?
-                .json::<ReleaseInfo>()
+                .json()
                 .await?;
-            extract_version_from_latest_tag(&latest_tag_name)?
+            releases
+                .into_iter()
+                .find_map(|r| {
+                    extract_version_from_latest_tag(&r.tag_name)
+                        .ok()
+                        .map(|v| (r.tag_name, v))
+                })
+                .map(|(_, v)| v)
+                .ok_or_else(|| anyhow::anyhow!("No valid release tags found"))?
         }
     };
 
@@ -136,10 +144,14 @@ fn extract_version_from_cask(cask_contents: &str) -> anyhow::Result<String> {
 }
 
 fn extract_version_from_latest_tag(latest_tag_name: &str) -> anyhow::Result<String> {
-    latest_tag_name
-        .strip_prefix("rust-v")
-        .map(str::to_owned)
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse latest tag name '{latest_tag_name}'"))
+    for prefix in RELEASE_TAG_PREFIXES {
+        if let Some(version) = latest_tag_name.strip_prefix(prefix) {
+            return Ok(version.to_owned());
+        }
+    }
+    Err(anyhow::anyhow!(
+        "Failed to parse latest tag name '{latest_tag_name}'"
+    ))
 }
 
 /// Returns the latest version to show in a popup, if it should be shown.
@@ -207,6 +219,10 @@ mod tests {
         assert_eq!(
             extract_version_from_latest_tag("rust-v1.5.0").expect("failed to parse version"),
             "1.5.0"
+        );
+        assert_eq!(
+            extract_version_from_latest_tag("codexaw-v2.0.0").expect("failed to parse version"),
+            "2.0.0"
         );
     }
 

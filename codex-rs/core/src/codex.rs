@@ -198,6 +198,7 @@ use crate::tools::spec::ToolsConfigParams;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::unified_exec::UnifiedExecProcessManager;
 use crate::user_notification::UserNotification;
+use crate::user_notification::UserPromptNotification;
 use crate::util::backoff;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
 use codex_async_utils::OrCancelExt;
@@ -1574,6 +1575,14 @@ impl Session {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
 
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ExecApproval {
+                command: command.clone(),
+                reason: reason.clone(),
+            },
+        );
+
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -1613,6 +1622,15 @@ impl Session {
         if prev_entry.is_some() {
             warn!("Overwriting existing pending approval for sub_id: {event_id}");
         }
+
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.notify_turn_user_prompt(
+            turn_context,
+            UserPromptNotification::ApplyPatchApproval {
+                files: prompt_files,
+                reason: reason.clone(),
+            },
+        );
 
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
@@ -2267,6 +2285,33 @@ impl Session {
 
     pub(crate) fn notifier(&self) -> &UserNotifier {
         &self.services.notifier
+    }
+
+    fn notify_turn_start_with_messages(
+        &self,
+        turn_context: &TurnContext,
+        input_messages: Vec<String>,
+    ) {
+        self.notifier().notify(&UserNotification::AgentTurnStart {
+            thread_id: self.conversation_id.to_string(),
+            turn_id: turn_context.sub_id.clone(),
+            cwd: turn_context.cwd.display().to_string(),
+            input_messages,
+        });
+    }
+
+    fn notify_turn_user_prompt(
+        &self,
+        turn_context: &TurnContext,
+        prompt: UserPromptNotification,
+    ) {
+        self.notifier()
+            .notify(&UserNotification::AgentTurnUserPrompt {
+                thread_id: self.conversation_id.to_string(),
+                turn_id: turn_context.sub_id.clone(),
+                cwd: turn_context.cwd.display().to_string(),
+                prompt,
+            });
     }
 
     pub(crate) fn user_shell(&self) -> Arc<shell::Shell> {
@@ -3326,6 +3371,17 @@ pub(crate) async fn run_turn(
     if total_usage_tokens >= auto_compact_limit {
         run_auto_compact(&sess, &turn_context).await;
     }
+
+    // Collect input messages for the turn start notification
+    let turn_input_messages = input
+        .iter()
+        .filter_map(|item| match item {
+            UserInput::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect::<Vec<String>>();
+
+    sess.notify_turn_start_with_messages(turn_context.as_ref(), turn_input_messages);
 
     let skills_outcome = Some(
         sess.services
