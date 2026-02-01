@@ -31,6 +31,9 @@ result
 # cli tools
 CLAUDE.md
 .claude/
+.codex/
+.gemini/
+.agent-watch/
 AGENTS.override.md
 
 # caches
@@ -67,6 +70,10 @@ coverage/
 
 # personal files
 personal/
+.local/
+
+# git worktrees
+.worktrees/
 
 # os
 .DS_Store
@@ -77,6 +84,7 @@ Icon?
 # Unwanted package managers
 .yarn/
 yarn.lock
+package-lock.json
 
 # release
 package.json-e
