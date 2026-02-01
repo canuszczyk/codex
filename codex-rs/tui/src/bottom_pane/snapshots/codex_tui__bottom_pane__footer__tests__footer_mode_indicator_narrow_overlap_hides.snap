@@ -2,4 +2,4 @@
 source: tui/src/bottom_pane/footer.rs
 expression: terminal.backend()
 ---
-"  Plan mode (shift+tab to cycle)                  "
+"  codexAW (0.93.0) · Plan mode                    "

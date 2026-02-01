@@ -250,27 +250,32 @@ fn left_side_line(
     collaboration_mode_indicator: Option<CollaborationModeIndicator>,
     state: LeftSideState,
 ) -> Line<'static> {
-    let mut line = Line::from("");
+    let mut line = Line::from(vec![
+        PRODUCT_NAME.cyan(),
+        format!(" ({CODEX_CLI_VERSION})").dim(),
+    ]);
+
     match state.hint {
         SummaryHintKind::None => {}
         SummaryHintKind::Shortcuts => {
+            line.push_span(Span::raw(" "));
             line.push_span(key_hint::plain(KeyCode::Char('?')));
             line.push_span(" for shortcuts".dim());
         }
         SummaryHintKind::QueueMessage => {
+            line.push_span(Span::raw(" "));
             line.push_span(key_hint::plain(KeyCode::Tab));
             line.push_span(" to queue message".dim());
         }
         SummaryHintKind::QueueShort => {
+            line.push_span(Span::raw(" "));
             line.push_span(key_hint::plain(KeyCode::Tab));
             line.push_span(" to queue".dim());
         }
     };
 
     if let Some(collaboration_mode_indicator) = collaboration_mode_indicator {
-        if !matches!(state.hint, SummaryHintKind::None) {
-            line.push_span(" · ".dim());
-        }
+        line.push_span(" · ".dim());
         line.push_span(collaboration_mode_indicator.styled_span(state.show_cycle_hint));
     }
 
@@ -745,25 +750,17 @@ fn build_columns(entries: Vec<Line<'static>>) -> Vec<Line<'static>> {
 }
 
 pub(crate) fn context_window_line(percent: Option<i64>, used_tokens: Option<i64>) -> Line<'static> {
-    let mut spans = vec![
-        PRODUCT_NAME.cyan(),
-        format!(" ({CODEX_CLI_VERSION})").dim(),
-        " ".into(),
-    ];
-
     if let Some(percent) = percent {
-        spans.push(format!("{}% context left", percent.clamp(0, 100)).dim());
-        return Line::from(spans);
+        let percent = percent.clamp(0, 100);
+        return Line::from(vec![Span::from(format!("{percent}% context left")).dim()]);
     }
 
     if let Some(tokens) = used_tokens {
         let used_fmt = format_tokens_compact(tokens);
-        spans.push(format!("{used_fmt} used").dim());
-        return Line::from(spans);
+        return Line::from(vec![Span::from(format!("{used_fmt} used")).dim()]);
     }
 
-    spans.push("100% context left".dim().into());
-    Line::from(spans)
+    Line::from(vec![Span::from("100% context left").dim()])
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
