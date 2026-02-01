@@ -3138,7 +3138,7 @@ mod tests {
             false,
         );
 
-        let area = Rect::new(0, 0, 40, 6);
+        let area = Rect::new(0, 0, 80, 6);
         let mut buf = Buffer::empty(area);
         composer.render(area, &mut buf);
 
