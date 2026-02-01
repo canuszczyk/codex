@@ -1,9 +1,9 @@
 /// Update action the CLI should perform after the TUI exits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UpdateAction {
-    /// Update via `npm install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz`.
+    /// Update via `npm install -g https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz`.
     NpmGlobalLatest,
-    /// Update via `bun install -g https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz`.
+    /// Update via `bun install -g https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz`.
     BunGlobalLatest,
     /// Update via `brew upgrade codex`.
     BrewUpgrade,
@@ -18,7 +18,7 @@ impl UpdateAction {
                 &[
                     "install",
                     "-g",
-                    "https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz",
+                    "https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz",
                 ],
             ),
             UpdateAction::BunGlobalLatest => (
@@ -26,7 +26,7 @@ impl UpdateAction {
                 &[
                     "install",
                     "-g",
-                    "https://github.com/canuszczyk/codex/releases/latest/download/codexaw.tgz",
+                    "https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz",
                 ],
             ),
             UpdateAction::BrewUpgrade => ("brew", &["upgrade", "codex"]),

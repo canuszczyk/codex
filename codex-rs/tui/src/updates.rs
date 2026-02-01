@@ -59,7 +59,7 @@ const VERSION_FILENAME: &str = "version.json";
 const HOMEBREW_CASK_URL: &str =
     "https://raw.githubusercontent.com/Homebrew/homebrew-cask/HEAD/Casks/c/codex.rb";
 const LATEST_RELEASES_URL: &str =
-    "https://api.github.com/repos/canuszczyk/codex/releases?per_page=20";
+    "https://api.github.com/repos/digitalsoftwaresolutionsrepos/codex/releases?per_page=20";
 const RELEASE_TAG_PREFIXES: [&str; 2] = ["codexaw-v", "rust-v"];
 
 #[derive(Deserialize, Debug, Clone)]
