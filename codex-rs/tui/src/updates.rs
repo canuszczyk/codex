@@ -57,7 +57,7 @@ struct VersionInfo {
 const VERSION_FILENAME: &str = "version.json";
 // We use the latest version from the cask if installation is via homebrew - homebrew does not immediately pick up the latest release and can lag behind.
 const HOMEBREW_CASK_API_URL: &str = "https://formulae.brew.sh/api/cask/codex.json";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/canuszczyk/codex/releases/latest";
 
 #[derive(Deserialize, Debug, Clone)]
 struct ReleaseInfo {
@@ -129,7 +129,8 @@ fn is_newer(latest: &str, current: &str) -> Option<bool> {
 
 fn extract_version_from_latest_tag(latest_tag_name: &str) -> anyhow::Result<String> {
     latest_tag_name
-        .strip_prefix("rust-v")
+        .strip_prefix("codexaw-v")
+        .or_else(|| latest_tag_name.strip_prefix("rust-v"))
         .map(str::to_owned)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse latest tag name '{latest_tag_name}'"))
 }

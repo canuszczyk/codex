@@ -114,11 +114,62 @@ where
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookEventBeforeAgent {
+    pub thread_id: ThreadId,
+    pub turn_id: String,
+    pub input_messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookEventAgentUserPrompt {
+    pub thread_id: ThreadId,
+    pub turn_id: String,
+    pub prompt: UserPromptNotification,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "prompt_type", rename_all = "snake_case")]
+pub enum UserPromptNotification {
+    ExecApproval {
+        command: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    ApplyPatchApproval {
+        files: Vec<PathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct HookEventAgentStop {
+    pub thread_id: ThreadId,
+    pub turn_id: String,
+    pub input_messages: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
 pub enum HookEvent {
+    BeforeAgent {
+        #[serde(flatten)]
+        event: HookEventBeforeAgent,
+    },
     AfterAgent {
         #[serde(flatten)]
         event: HookEventAfterAgent,
+    },
+    AgentUserPrompt {
+        #[serde(flatten)]
+        event: HookEventAgentUserPrompt,
+    },
+    AgentStop {
+        #[serde(flatten)]
+        event: HookEventAgentStop,
     },
     AfterToolUse {
         #[serde(flatten)]

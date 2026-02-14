@@ -44,9 +44,12 @@ use async_channel::Receiver;
 use async_channel::Sender;
 use codex_hooks::HookEvent;
 use codex_hooks::HookEventAfterAgent;
+use codex_hooks::HookEventAgentUserPrompt;
+use codex_hooks::HookEventBeforeAgent;
 use codex_hooks::HookPayload;
 use codex_hooks::Hooks;
 use codex_hooks::HooksConfig;
+use codex_hooks::UserPromptNotification;
 use codex_network_proxy::NetworkProxy;
 use codex_protocol::ThreadId;
 use codex_protocol::approvals::ExecPolicyAmendment;
@@ -2066,6 +2069,24 @@ impl Session {
             warn!("Overwriting existing pending approval for call_id: {approval_id}");
         }
 
+        self.hooks()
+            .dispatch(HookPayload {
+                session_id: self.conversation_id,
+                cwd: turn_context.cwd.clone(),
+                triggered_at: chrono::Utc::now(),
+                hook_event: HookEvent::AgentUserPrompt {
+                    event: HookEventAgentUserPrompt {
+                        thread_id: self.conversation_id,
+                        turn_id: turn_context.sub_id.clone(),
+                        prompt: UserPromptNotification::ExecApproval {
+                            command: command.clone(),
+                            reason: reason.clone(),
+                        },
+                    },
+                },
+            })
+            .await;
+
         let parsed_cmd = parse_command(&command);
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
             call_id,
@@ -2104,6 +2125,25 @@ impl Session {
         if prev_entry.is_some() {
             warn!("Overwriting existing pending approval for call_id: {approval_id}");
         }
+
+        let prompt_files = changes.keys().cloned().collect::<Vec<PathBuf>>();
+        self.hooks()
+            .dispatch(HookPayload {
+                session_id: self.conversation_id,
+                cwd: turn_context.cwd.clone(),
+                triggered_at: chrono::Utc::now(),
+                hook_event: HookEvent::AgentUserPrompt {
+                    event: HookEventAgentUserPrompt {
+                        thread_id: self.conversation_id,
+                        turn_id: turn_context.sub_id.clone(),
+                        prompt: UserPromptNotification::ApplyPatchApproval {
+                            files: prompt_files,
+                            reason: reason.clone(),
+                        },
+                    },
+                },
+            })
+            .await;
 
         let event = EventMsg::ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent {
             call_id,
@@ -4041,6 +4081,30 @@ pub(crate) async fn run_turn(
         collaboration_mode_kind: turn_context.collaboration_mode.mode,
     });
     sess.send_event(&turn_context, event).await;
+
+    // codexAW: notify external listener that a turn is starting.
+    let turn_start_input_messages: Vec<String> = input
+        .iter()
+        .filter_map(|ui| match ui {
+            codex_protocol::user_input::UserInput::Text { text, .. } => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    sess.hooks()
+        .dispatch(HookPayload {
+            session_id: sess.conversation_id,
+            cwd: turn_context.cwd.clone(),
+            triggered_at: chrono::Utc::now(),
+            hook_event: HookEvent::BeforeAgent {
+                event: HookEventBeforeAgent {
+                    thread_id: sess.conversation_id,
+                    turn_id: turn_context.sub_id.clone(),
+                    input_messages: turn_start_input_messages,
+                },
+            },
+        })
+        .await;
+
     if run_pre_sampling_compact(&sess, &turn_context)
         .await
         .is_err()

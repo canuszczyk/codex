@@ -30,6 +30,9 @@ use crate::session_prefix::TURN_ABORTED_OPEN_TAG;
 use crate::state::ActiveTurn;
 use crate::state::RunningTask;
 use crate::state::TaskKind;
+use codex_hooks::HookEvent;
+use codex_hooks::HookEventAgentStop;
+use codex_hooks::HookPayload;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseInputItem;
 use codex_protocol::models::ResponseItem;
@@ -281,6 +284,22 @@ impl Session {
             .await;
 
         if reason == TurnAbortReason::Interrupted {
+            // codexAW: notify external listener that the turn was stopped.
+            self.hooks()
+                .dispatch(HookPayload {
+                    session_id: self.conversation_id,
+                    cwd: task.turn_context.cwd.clone(),
+                    triggered_at: chrono::Utc::now(),
+                    hook_event: HookEvent::AgentStop {
+                        event: HookEventAgentStop {
+                            thread_id: self.conversation_id,
+                            turn_id: task.turn_context.sub_id.clone(),
+                            input_messages: Vec::new(),
+                        },
+                    },
+                })
+                .await;
+
             let marker = ResponseItem::Message {
                 id: None,
                 role: "user".to_string(),

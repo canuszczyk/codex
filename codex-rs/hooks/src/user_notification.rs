@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 
@@ -13,23 +14,64 @@ use crate::command_from_argv;
 /// Legacy notify payload appended as the final argv argument for backward compatibility.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
+#[allow(clippy::enum_variant_names)]
 enum UserNotification {
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnStart {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        input_messages: Vec<String>,
+    },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnUserPrompt {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        prompt: LegacyUserPromptNotification,
+    },
     #[serde(rename_all = "kebab-case")]
     AgentTurnComplete {
         thread_id: String,
         turn_id: String,
         cwd: String,
-
-        /// Messages that the user sent to the agent to initiate the turn.
         input_messages: Vec<String>,
-
-        /// The last message sent by the assistant in the turn.
         last_assistant_message: Option<String>,
+    },
+    #[serde(rename_all = "kebab-case")]
+    AgentTurnStop {
+        thread_id: String,
+        turn_id: String,
+        cwd: String,
+        input_messages: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "prompt-type", rename_all = "kebab-case")]
+enum LegacyUserPromptNotification {
+    ExecApproval {
+        command: Vec<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+    },
+    ApplyPatchApproval {
+        files: Vec<PathBuf>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
 }
 
 pub fn legacy_notify_json(hook_event: &HookEvent, cwd: &Path) -> Result<String, serde_json::Error> {
     match hook_event {
+        HookEvent::BeforeAgent { event } => {
+            serde_json::to_string(&UserNotification::AgentTurnStart {
+                thread_id: event.thread_id.to_string(),
+                turn_id: event.turn_id.clone(),
+                cwd: cwd.display().to_string(),
+                input_messages: event.input_messages.clone(),
+            })
+        }
         HookEvent::AfterAgent { event } => {
             serde_json::to_string(&UserNotification::AgentTurnComplete {
                 thread_id: event.thread_id.to_string(),
@@ -39,8 +81,38 @@ pub fn legacy_notify_json(hook_event: &HookEvent, cwd: &Path) -> Result<String, 
                 last_assistant_message: event.last_assistant_message.clone(),
             })
         }
+        HookEvent::AgentUserPrompt { event } => {
+            let prompt = match &event.prompt {
+                crate::types::UserPromptNotification::ExecApproval { command, reason } => {
+                    LegacyUserPromptNotification::ExecApproval {
+                        command: command.clone(),
+                        reason: reason.clone(),
+                    }
+                }
+                crate::types::UserPromptNotification::ApplyPatchApproval { files, reason } => {
+                    LegacyUserPromptNotification::ApplyPatchApproval {
+                        files: files.clone(),
+                        reason: reason.clone(),
+                    }
+                }
+            };
+            serde_json::to_string(&UserNotification::AgentTurnUserPrompt {
+                thread_id: event.thread_id.to_string(),
+                turn_id: event.turn_id.clone(),
+                cwd: cwd.display().to_string(),
+                prompt,
+            })
+        }
+        HookEvent::AgentStop { event } => {
+            serde_json::to_string(&UserNotification::AgentTurnStop {
+                thread_id: event.thread_id.to_string(),
+                turn_id: event.turn_id.clone(),
+                cwd: cwd.display().to_string(),
+                input_messages: event.input_messages.clone(),
+            })
+        }
         _ => Err(serde_json::Error::io(std::io::Error::other(
-            "legacy notify payload is only supported for after_agent",
+            "legacy notify payload is not supported for this event type",
         ))),
     }
 }

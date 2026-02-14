@@ -12,7 +12,10 @@ pub struct HooksConfig {
 
 #[derive(Clone)]
 pub struct Hooks {
+    before_agent: Vec<Hook>,
     after_agent: Vec<Hook>,
+    agent_user_prompt: Vec<Hook>,
+    agent_stop: Vec<Hook>,
     after_tool_use: Vec<Hook>,
 }
 
@@ -26,21 +29,27 @@ impl Default for Hooks {
 // executed after specific events in the Codex lifecycle.
 impl Hooks {
     pub fn new(config: HooksConfig) -> Self {
-        let after_agent = config
+        let notify_hooks: Vec<Hook> = config
             .legacy_notify_argv
             .filter(|argv| !argv.is_empty() && !argv[0].is_empty())
             .map(crate::notify_hook)
             .into_iter()
             .collect();
         Self {
-            after_agent,
+            before_agent: notify_hooks.clone(),
+            after_agent: notify_hooks.clone(),
+            agent_user_prompt: notify_hooks.clone(),
+            agent_stop: notify_hooks,
             after_tool_use: Vec::new(),
         }
     }
 
     fn hooks_for_event(&self, hook_event: &HookEvent) -> &[Hook] {
         match hook_event {
+            HookEvent::BeforeAgent { .. } => &self.before_agent,
             HookEvent::AfterAgent { .. } => &self.after_agent,
+            HookEvent::AgentUserPrompt { .. } => &self.agent_user_prompt,
+            HookEvent::AgentStop { .. } => &self.agent_stop,
             HookEvent::AfterToolUse { .. } => &self.after_tool_use,
         }
     }

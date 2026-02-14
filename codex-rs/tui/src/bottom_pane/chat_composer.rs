@@ -3643,7 +3643,8 @@ mod tests {
             false,
         );
 
-        let area = Rect::new(0, 0, 40, 6);
+        // Use 80 cols to accommodate the codexAW branding in the context line.
+        let area = Rect::new(0, 0, 80, 6);
         let mut buf = Buffer::empty(area);
         composer.render(area, &mut buf);
 
