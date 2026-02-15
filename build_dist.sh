@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}" )" && pwd)
-PNPM=${PNPM:-node "$ROOT_DIR/.local/lib/node_modules/pnpm/dist/pnpm.cjs"}
+PNPM_SCRIPT="${ROOT_DIR}/.local/lib/node_modules/pnpm/dist/pnpm.cjs"
 VERSION_OVERRIDE=${1:-}
 PACKAGE_JSON="$ROOT_DIR/codex-cli/package.json"
 CODEX_RS_DIR="$ROOT_DIR/codex-rs"
 CARGO_TARGET_DIR_OVERRIDE="$CODEX_RS_DIR/target-codexaw"
-ORIG_VERSION=$(node -e "console.log(require('$PACKAGE_JSON').version)")
+ORIG_VERSION=$(node -e "console.log(require(process.argv[1]).version)" "$PACKAGE_JSON")
 TMP_DIR=""
+
+run_pnpm() {
+  if [[ -n "${PNPM:-}" ]]; then
+    $PNPM "$@"
+  elif [[ -f "$PNPM_SCRIPT" ]]; then
+    node "$PNPM_SCRIPT" "$@"
+  elif command -v pnpm >/dev/null 2>&1; then
+    pnpm "$@"
+  else
+    echo "pnpm not found" >&2
+    exit 1
+  fi
+}
+
 cleanup() {
   if [[ -n "$VERSION_OVERRIDE" ]]; then
-    node -e "const fs=require('fs');const pkg=require('$PACKAGE_JSON');pkg.version='$ORIG_VERSION';fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg,null,2)+'\\n');"
+    node -e "const fs=require('fs');const p=process.argv[1];const pkg=require(p);pkg.version=process.argv[2];fs.writeFileSync(p, JSON.stringify(pkg,null,2)+'\\n');" "$PACKAGE_JSON" "$ORIG_VERSION"
   fi
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then
     rm -rf "$TMP_DIR"
@@ -18,10 +32,10 @@ cleanup() {
 }
 trap cleanup EXIT
 if [[ -n "$VERSION_OVERRIDE" ]]; then
-  node -e "const fs=require('fs');const pkg=require('$PACKAGE_JSON');pkg.version='$VERSION_OVERRIDE';fs.writeFileSync('$PACKAGE_JSON', JSON.stringify(pkg,null,2)+'\\n');"
+  node -e "const fs=require('fs');const p=process.argv[1];const pkg=require(p);pkg.version=process.argv[2];fs.writeFileSync(p, JSON.stringify(pkg,null,2)+'\\n');" "$PACKAGE_JSON" "$VERSION_OVERRIDE"
 fi
 cd "$ROOT_DIR"
-$PNPM install
+run_pnpm install
 cd "$ROOT_DIR/codex-cli"
 
 # Skip downloading prebuilt binaries from GitHub Actions (requires auth to openai/codex).
@@ -52,7 +66,7 @@ mkdir -p "$VENDOR_DIR/x86_64-pc-windows-msvc/codex"
 mkdir -p "$VENDOR_DIR/aarch64-pc-windows-msvc/codex"
 rm -rf dist
 mkdir -p dist
-$PNPM pack --pack-destination ./dist
+run_pnpm pack --pack-destination ./dist
 TARBALL="openai-codex-${VERSION_OVERRIDE:-0.0.0-dev}.tgz"
 TMP_DIR=$(mktemp -d)
 tar -xzf "dist/$TARBALL" -C "$TMP_DIR"
