@@ -49,8 +49,10 @@ ensure_claude_commands() {
   local prompt_file="$commands_dir/port-release.md"
   local wiki_url="https://raw.githubusercontent.com/wiki/digitalsoftwaresolutionsrepos/codex/Port-Release-Prompt.md"
 
-  # Fix ownership of .claude volume (may be root-owned when first created)
-  [ -d /home/vscode/.claude ] && sudo chown -R "$(id -u):$(id -g)" /home/vscode/.claude || true
+  # Fix ownership of .claude dir (may be root-owned when first created) — top-level only
+  if [ -d /home/vscode/.claude ] && [ "$(stat -c '%u:%g' /home/vscode/.claude 2>/dev/null)" != "$(id -u):$(id -g)" ]; then
+    sudo chown "$(id -u):$(id -g)" /home/vscode/.claude || true
+  fi
 
   # Create commands directory if it doesn't exist
   mkdir -p "$commands_dir"
@@ -114,18 +116,22 @@ install_ai_clis() {
   fi
 
   # Codexaw (forked) - install first, then rename binary (timeout 120s)
-  log "Installing Codexaw CLI…"
-  if timeout 120 npm install -g https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz; then
-    if [ -x "$bin_dir/codex" ]; then
-      mv "$bin_dir/codex" "$bin_dir/codexaw" >/dev/null 2>&1 || true
+  if ! command -v codexaw >/dev/null 2>&1; then
+    log "Installing Codexaw CLI…"
+    if timeout 120 npm install -g https://github.com/digitalsoftwaresolutionsrepos/codex/releases/latest/download/codexaw.tgz; then
+      if [ -x "$bin_dir/codex" ]; then
+        mv "$bin_dir/codex" "$bin_dir/codexaw" >/dev/null 2>&1 || true
+      fi
+    else
+      log "Warning: Failed/timeout installing codexaw (non-fatal)."
     fi
-  else
-    log "Warning: Failed/timeout installing codexaw (non-fatal)."
   fi
 
   # Official Codex (upstream) (timeout 120s)
-  log "Installing Codex CLI…"
-  timeout 120 npm install -g @openai/codex || log "Warning: Failed/timeout installing upstream codex (non-fatal)."
+  if ! command -v codex >/dev/null 2>&1; then
+    log "Installing Codex CLI…"
+    timeout 120 npm install -g @openai/codex || log "Warning: Failed/timeout installing upstream codex (non-fatal)."
+  fi
 }
 
 ensure_pnpm() {
@@ -155,92 +161,14 @@ bootstrap_app() {
     return
   fi
 
-  # Ensure dev caches are owned by the container user (for named volumes)
-  for p in /home/vscode/.nuget /home/vscode/.npm /home/vscode/.codex; do
-    [ -d "$p" ] && sudo chown -R "$(id -u):$(id -g)" "$p" || true
+  # Ensure dev caches are owned by the container user (for named volumes) — top-level only
+  local myuid="$(id -u):$(id -g)"
+  for p in /home/vscode/.nuget /home/vscode/.npm /home/vscode/.codex /home/vscode/.agentwatch /home/vscode/.agent-watch-hooks; do
+    if [ -d "$p" ] && [ "$(stat -c '%u:%g' "$p" 2>/dev/null)" != "$myuid" ]; then
+      sudo chown "$myuid" "$p" || true
+    fi
   done
 
-  # ----- .NET deps -----
-  if command -v dotnet >/dev/null 2>&1; then
-    # Prefer a solution; otherwise pick dotnet-api; otherwise restore all projects
-    sln="$(find . -maxdepth 3 -name '*.sln' | head -n1 || true)"
-    if [[ -n "$sln" ]]; then
-      log "dotnet restore ($(basename "$sln"))"
-      if ( cd "$(dirname "$sln")" && dotnet restore ); then
-        :
-      else
-        log "dotnet restore retry (disable parallel)"
-        ( cd "$(dirname "$sln")" && dotnet restore --disable-parallel ) || true
-      fi
-    elif [[ -d dotnet-api ]]; then
-      log "dotnet restore (dotnet-api/*)"
-      ( cd dotnet-api && dotnet restore ) \
-        || ( cd dotnet-api && dotnet restore --disable-parallel ) || true
-    else
-      csprojs=($(find . -name '*.csproj' | tr '\n' ' '))
-      if (( ${#csprojs[@]} > 0 )); then
-        log "dotnet restore (all projects)"
-        dotnet restore "${csprojs[@]}" \
-          || dotnet restore --disable-parallel "${csprojs[@]}" || true
-      else
-        log "skipping dotnet restore: no .sln or .csproj found"
-      fi
-    fi
-
-    # Optional: compile flags that avoid named pipes for MSBuild/Roslyn
-    export DOTNET_BUILD_FLAGS="-nodeReuse:false /p:UseSharedCompilation=false"
-  fi
-
-  # --- Install just ---
-  if command -v cargo >/dev/null 2>&1; then
-    if ! command -v just >/dev/null 2>&1; then
-      log "Installing just"
-      cargo install just || true
-    else
-      log "just is already installed"
-    fi
-  fi
-
-  # --- Install cargo-nextest ---
-  if command -v cargo >/dev/null 2>&1; then
-    if ! command -v cargo-nextest >/dev/null 2>&1; then
-      log "Installing cargo-nextest"
-      cargo install cargo-nextest --locked || true
-    else
-      log "cargo-nextest is already installed"
-    fi
-  fi
-
-  # ----- JS deps (npm, with optional workspaces) -----
-  if command -v npm >/dev/null 2>&1; then
-    if [[ -f package-lock.json || -f package.json ]]; then
-      # decide if this repo actually uses npm workspaces at the root
-      use_workspaces=false
-      if [[ -f package.json ]] && grep -q '"workspaces"' package.json; then
-        use_workspaces=true
-      fi
-
-      if [[ -f package-lock.json ]]; then
-        if [[ "$use_workspaces" == true ]]; then
-          log "npm ci (workspaces)"
-          npm ci --workspaces --include-workspace-root || true
-        else
-          log "npm ci"
-          npm ci || true
-        fi
-      else
-        if [[ "$use_workspaces" == true ]]; then
-          log "npm install (workspaces)"
-          npm install --workspaces --include-workspace-root || true
-        else
-          log "npm install"
-          npm install || true
-        fi
-      fi
-    else
-      log "skipping npm: no package.json at repo root"
-    fi
-  fi
 }
 
 main() {
